@@ -74,11 +74,15 @@ class TestAudioRecorderStart:
         temp_dir = tmp_path / "new_dir"
         recorder = AudioRecorder(temp_dir=temp_dir)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
+            recorder.start()
 
         assert temp_dir.exists()
         recorder.stop()
@@ -87,11 +91,15 @@ class TestAudioRecorderStart:
         """Should create temp file with mkstemp."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
+            recorder.start()
 
         assert recorder._temp_file is not None
         assert recorder._temp_file.suffix == ".wav"
@@ -101,16 +109,20 @@ class TestAudioRecorderStart:
         """Should open SoundFile for writing."""
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000, channels=1)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile") as mock_sf,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile") as mock_sf:
-                recorder.start()
-                mock_sf.assert_called_once()
-                call_kwargs = mock_sf.call_args[1]
-                assert call_kwargs["mode"] == "w"
-                assert call_kwargs["samplerate"] == 16000
-                assert call_kwargs["channels"] == 1
+            recorder.start()
+            mock_sf.assert_called_once()
+            call_kwargs = mock_sf.call_args[1]
+            assert call_kwargs["mode"] == "w"
+            assert call_kwargs["samplerate"] == 16000
+            assert call_kwargs["channels"] == 1
 
         recorder.stop()
 
@@ -118,18 +130,22 @@ class TestAudioRecorderStart:
         """Should open InputStream with correct parameters."""
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000, channels=1, buffer_size=1024)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
+            recorder.start()
 
-                mock_stream_cls.assert_called_once()
-                call_kwargs = mock_stream_cls.call_args[1]
-                assert call_kwargs["samplerate"] == 16000
-                assert call_kwargs["channels"] == 1
-                assert call_kwargs["blocksize"] == 1024
-                mock_stream.start.assert_called_once()
+            mock_stream_cls.assert_called_once()
+            call_kwargs = mock_stream_cls.call_args[1]
+            assert call_kwargs["samplerate"] == 16000
+            assert call_kwargs["channels"] == 1
+            assert call_kwargs["blocksize"] == 1024
+            mock_stream.start.assert_called_once()
 
         recorder.stop()
 
@@ -137,12 +153,16 @@ class TestAudioRecorderStart:
         """Should set is_recording to True."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                assert recorder.is_recording is True
+            recorder.start()
+            assert recorder.is_recording is True
 
         recorder.stop()
 
@@ -151,6 +171,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
             patch("soundfile.SoundFile"),
             patch("sounddevice.InputStream") as mock_stream_cls,
         ):
@@ -164,6 +186,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
             patch("soundfile.SoundFile"),
             patch("sounddevice.InputStream") as mock_stream_cls,
         ):
@@ -176,15 +200,19 @@ class TestAudioRecorderStart:
         """Second start() should be no-op if already recording."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                recorder.start()  # Second call
+            recorder.start()
+            recorder.start()  # Second call
 
-                # Should only be called once
-                assert mock_stream_cls.call_count == 1
+            # Should only be called once
+            assert mock_stream_cls.call_count == 1
 
         recorder.stop()
 
@@ -192,17 +220,21 @@ class TestAudioRecorderStart:
         """Should clean up resources if stream creation fails."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("soundfile.SoundFile") as mock_sf:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("soundfile.SoundFile") as mock_sf,
+            patch("sounddevice.InputStream") as mock_stream_cls,
+        ):
             mock_file = MagicMock()
             mock_sf.return_value = mock_file
-            with patch("sounddevice.InputStream") as mock_stream_cls:
-                mock_stream_cls.side_effect = Exception("Stream error")
+            mock_stream_cls.side_effect = Exception("Stream error")
 
-                with pytest.raises(AudioDeviceBusyError):
-                    recorder.start()
+            with pytest.raises(AudioDeviceBusyError):
+                recorder.start()
 
-                # Sound file should be closed
-                mock_file.close.assert_called()
+            # Sound file should be closed
+            mock_file.close.assert_called()
 
 
 class TestAudioRecorderStop:
@@ -212,57 +244,73 @@ class TestAudioRecorderStop:
         """Should return path to temp file."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                result = recorder.stop()
+            recorder.start()
+            result = recorder.stop()
 
-                assert isinstance(result, Path)
-                assert result == recorder._temp_file
+            assert isinstance(result, Path)
+            assert result == recorder._temp_file
 
     def test_closes_stream(self, tmp_path: Path) -> None:
         """Should stop and close the stream."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                recorder.stop()
+            recorder.start()
+            recorder.stop()
 
-                mock_stream.stop.assert_called_once()
-                mock_stream.close.assert_called_once()
+            mock_stream.stop.assert_called_once()
+            mock_stream.close.assert_called_once()
 
     def test_closes_soundfile(self, tmp_path: Path) -> None:
         """Should close the SoundFile."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile") as mock_sf,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile") as mock_sf:
-                mock_file = MagicMock()
-                mock_sf.return_value = mock_file
-                recorder.start()
-                recorder.stop()
+            mock_file = MagicMock()
+            mock_sf.return_value = mock_file
+            recorder.start()
+            recorder.stop()
 
-                mock_file.close.assert_called_once()
+            mock_file.close.assert_called_once()
 
     def test_sets_recording_flag_false(self, tmp_path: Path) -> None:
         """Should set is_recording to False."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                recorder.stop()
+            recorder.start()
+            recorder.stop()
 
-                assert recorder.is_recording is False
+            assert recorder.is_recording is False
 
     def test_not_started_raises_error(self) -> None:
         """Should raise RuntimeError if never started."""
@@ -285,17 +333,22 @@ class TestGetDuration:
         """Should return elapsed time while recording."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+            patch("time.time") as mock_time,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"), patch("time.time") as mock_time:
-                mock_time.return_value = 100.0
-                recorder.start()
+            mock_time.return_value = 100.0
+            recorder.start()
 
-                mock_time.return_value = 105.0
-                duration = recorder.get_duration()
+            mock_time.return_value = 105.0
+            duration = recorder.get_duration()
 
-                assert duration == 5.0
+            assert duration == 5.0
 
         recorder.stop()
 
@@ -303,17 +356,21 @@ class TestGetDuration:
         """Should return calculated duration after stop."""
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile"),
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile"):
-                recorder.start()
-                # Set frames written AFTER start (since start resets it)
-                recorder._frames_written = 32000  # 2 seconds worth
-                recorder.stop()
+            recorder.start()
+            # Set frames written AFTER start (since start resets it)
+            recorder._frames_written = 32000  # 2 seconds worth
+            recorder.stop()
 
-                duration = recorder.get_duration()
-                assert duration == 2.0
+            duration = recorder.get_duration()
+            assert duration == 2.0
 
 
 class TestAudioCallback:
@@ -324,22 +381,26 @@ class TestAudioCallback:
         callback = MagicMock()
         recorder = AudioRecorder(temp_dir=tmp_path, level_callback=callback)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile") as mock_sf,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile") as mock_sf:
-                mock_file = MagicMock()
-                mock_file.closed = False
-                mock_sf.return_value = mock_file
-                recorder.start()
+            mock_file = MagicMock()
+            mock_file.closed = False
+            mock_sf.return_value = mock_file
+            recorder.start()
 
-                # Simulate callback
-                test_data = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
-                recorder._audio_callback(test_data, 3, {}, sd.CallbackFlags())
+            # Simulate callback
+            test_data = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
+            recorder._audio_callback(test_data, 3, {}, sd.CallbackFlags())
 
-                callback.assert_called()
-                # RMS of 0.5, 0.5, 0.5 = 0.5
-                assert abs(callback.call_args[0][0] - 0.5) < 0.01
+            callback.assert_called()
+            # RMS of 0.5, 0.5, 0.5 = 0.5
+            assert abs(callback.call_args[0][0] - 0.5) < 0.01
 
         recorder.stop()
 
@@ -347,19 +408,23 @@ class TestAudioCallback:
         """Should write data to sound file."""
         recorder = AudioRecorder(temp_dir=tmp_path)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile") as mock_sf,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile") as mock_sf:
-                mock_file = MagicMock()
-                mock_file.closed = False
-                mock_sf.return_value = mock_file
-                recorder.start()
+            mock_file = MagicMock()
+            mock_file.closed = False
+            mock_sf.return_value = mock_file
+            recorder.start()
 
-                test_data = np.zeros((100, 1), dtype=np.float32)
-                recorder._audio_callback(test_data, 100, {}, sd.CallbackFlags())
+            test_data = np.zeros((100, 1), dtype=np.float32)
+            recorder._audio_callback(test_data, 100, {}, sd.CallbackFlags())
 
-                mock_file.write.assert_called()
+            mock_file.write.assert_called()
 
         recorder.stop()
 
@@ -367,24 +432,28 @@ class TestAudioCallback:
         """Should stop recording at max duration."""
         recorder = AudioRecorder(temp_dir=tmp_path, max_duration=5)
 
-        with patch("sounddevice.InputStream") as mock_stream_cls:
+        with (
+            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("sounddevice.InputStream") as mock_stream_cls,
+            patch("soundfile.SoundFile") as mock_sf,
+            patch("time.time") as mock_time,
+        ):
             mock_stream = MagicMock()
             mock_stream_cls.return_value = mock_stream
-            with patch("soundfile.SoundFile") as mock_sf:
-                mock_file = MagicMock()
-                mock_file.closed = False
-                mock_sf.return_value = mock_file
-                with patch("time.time") as mock_time:
-                    mock_time.return_value = 100.0
-                    recorder.start()
+            mock_file = MagicMock()
+            mock_file.closed = False
+            mock_sf.return_value = mock_file
+            mock_time.return_value = 100.0
+            recorder.start()
 
-                    # Simulate callback after max duration
-                    mock_time.return_value = 106.0  # 6 seconds later
-                    test_data = np.zeros((100, 1), dtype=np.float32)
-                    recorder._audio_callback(test_data, 100, {}, sd.CallbackFlags())
+            # Simulate callback after max duration
+            mock_time.return_value = 106.0  # 6 seconds later
+            test_data = np.zeros((100, 1), dtype=np.float32)
+            recorder._audio_callback(test_data, 100, {}, sd.CallbackFlags())
 
-                    # Should have stopped recording
-                    assert recorder._is_recording is False
+            # Should have stopped recording
+            assert recorder._is_recording is False
 
         recorder.stop()
 
