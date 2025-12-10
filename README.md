@@ -7,13 +7,19 @@
 
 > 100% offline, Whisper-powered voice notes from your terminal
 
-**Use cases:** Voice prompts for LLMs (`hark | llm`), meeting minutes, quick voice journaling
+### Use Cases
+
+- **Voice-to-LLM pipelines** — `hark | llm` turns speech into AI prompts instantly
+- **Meeting minutes** — Transcribe calls with speaker identification (`--diarize`)
+- **System audio capture** — Record what you hear, not just what you say (`--input speaker`)
+- **Private by design** — No cloud, no API keys, no data leaves your machine
 
 ## Features
 
 - 🎙️ **Record** - Press space to start, Ctrl+C to stop
 - 🔊 **Multi-source** - Capture microphone, system audio, or both
 - ✨ **Transcribe** - Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- 🗣️ **Diarize** - Identify who said what with [WhisperX](https://github.com/m-bain/whisperX)
 - 🔒 **Local** - 100% offline, no cloud required
 - 📄 **Flexible** - Output as plain text, markdown, or SRT subtitles
 
@@ -103,17 +109,21 @@ preprocessing:
 output:
   format: plain # plain, markdown, srt
   timestamps: false
+
+diarization:
+  hf_token: null # HuggingFace token (required for --diarize)
+  local_speaker_name: null # Your name in stereo mode, or null for SPEAKER_00
 ```
 
 ## Audio Input Sources
 
 Hark supports three input modes via `--input` or `recording.input_source`:
 
-| Mode | Description |
-|------|-------------|
-| `mic` | Microphone only (default) |
-| `speaker` | System audio only (loopback capture) |
-| `both` | Microphone + system audio as stereo (L=mic, R=speaker) |
+| Mode      | Description                                            |
+| --------- | ------------------------------------------------------ |
+| `mic`     | Microphone only (default)                              |
+| `speaker` | System audio only (loopback capture)                   |
+| `both`    | Microphone + system audio as stereo (L=mic, R=speaker) |
 
 ### System Audio Capture (Linux)
 
@@ -124,16 +134,122 @@ pactl list sources | grep -i monitor
 ```
 
 You should see output like:
+
 ```
 Name: alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
 Description: Monitor of Built-in Audio
 ```
 
-### Use Cases
+## Speaker Diarization
 
-- **Online meetings**: Use `--input speaker` to transcribe remote participants
-- **Conversations**: Use `--input both` to capture both sides for future diarization
-- **Voice notes**: Use `--input mic` (default) for personal dictation
+Identify who said what in multi-speaker recordings using [WhisperX](https://github.com/m-bain/whisperX).
+
+### Setup
+
+1. Install diarization dependencies:
+
+   ```bash
+   pipx inject hark-cli whisperx
+   # Or with pip:
+   pip install hark-cli[diarization]
+   ```
+
+2. Get a HuggingFace token (required for pyannote models):
+
+   - Create account at https://huggingface.co
+   - Accept model licenses:
+     - https://huggingface.co/pyannote/segmentation-3.0
+     - https://huggingface.co/pyannote/speaker-diarization-3.1
+   - Create token at https://huggingface.co/settings/tokens
+
+3. Add token to config:
+   ```yaml
+   # ~/.config/hark/config.yaml
+   diarization:
+     hf_token: "hf_xxxxxxxxxxxxx"
+   ```
+
+### Usage
+
+The `--diarize` flag enables speaker identification. It requires `--input speaker` or `--input both`.
+
+```bash
+# Transcribe a meeting with speaker identification
+hark --diarize --input speaker meeting.txt
+
+# Specify expected number of speakers (improves accuracy)
+hark --diarize --speakers 3 --input speaker meeting.md
+
+# Skip interactive speaker naming for batch processing
+hark --diarize --no-interactive --input speaker meeting.txt
+
+# Stereo mode: separate local user from remote speakers
+hark --diarize --input both conversation.md
+
+# Combine with other options
+hark --diarize --input speaker --format markdown --model large-v3 meeting.md
+```
+
+| Flag               | Description                                           |
+| ------------------ | ----------------------------------------------------- |
+| `--diarize`        | Enable speaker identification                         |
+| `--speakers N`     | Hint for expected speaker count (improves clustering) |
+| `--no-interactive` | Skip post-transcription speaker naming prompt         |
+
+**Note:** Diarization adds processing time. For a 5-minute recording, expect ~1-2 minutes on GPU or ~5-10 minutes on CPU.
+
+### Output Format
+
+With diarization enabled, output includes speaker labels and timestamps:
+
+**Plain text:**
+
+```
+[00:02] [SPEAKER_01] Hello everyone, let's get started.
+[00:05] [SPEAKER_02] Thanks for joining. Let me share my screen.
+```
+
+**Markdown:**
+
+```markdown
+# Meeting Transcript
+
+**SPEAKER_01** (00:02)
+Hello everyone, let's get started.
+
+**SPEAKER_02** (00:05)
+Thanks for joining. Let me share my screen.
+
+---
+
+_2 speakers detected • Duration: 5:23 • Language: en (98% confidence)_
+```
+
+### Interactive Naming
+
+After transcription, hark will prompt you to identify speakers:
+
+```
+Detected 2 speaker(s) to identify.
+
+SPEAKER_01 said: "Hello everyone, let's get started."
+Who is this? [name/skip/done]: Alice
+
+SPEAKER_02 said: "Thanks for joining. Let me share my screen."
+Who is this? [name/skip/done]: Bob
+```
+
+Use `--no-interactive` to skip this prompt.
+
+### Known Issues
+
+**Slow diarization?** The pyannote models may default to CPU inference. For GPU acceleration:
+
+```bash
+pip install --force-reinstall onnxruntime-gpu
+```
+
+See [WhisperX #499](https://github.com/m-bain/whisperX/issues/499) for details.
 
 ## Development
 

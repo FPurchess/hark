@@ -6,8 +6,12 @@ import argparse
 import sys
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
+
+if TYPE_CHECKING:
+    from hark.diarizer import DiarizationResult
 
 __all__ = [
     "create_parser",
@@ -31,13 +35,16 @@ from hark.constants import (
     VALID_MODELS,
     VALID_OUTPUT_FORMATS,
 )
-from hark.exceptions import HarkError
+from hark.exceptions import DependencyMissingError, HarkError, MissingTokenError
 from hark.formatter import get_formatter
 from hark.keypress import KeypressHandler
 from hark.preprocessor import AudioPreprocessor
 from hark.recorder import AudioRecorder
 from hark.transcriber import Transcriber, TranscriptionResult
 from hark.ui import UI
+
+# Type alias for results
+FormattableResult = TranscriptionResult
 
 
 def create_parser() -> argparse.ArgumentParser:
@@ -48,12 +55,14 @@ def create_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-  hark                          Record and output to stdout
-  hark output.txt               Record and save to file
-  hark --lang de speech.md      Record with German language
-  hark --model large-v3 out.txt Use large model for better accuracy
-  hark --timestamps notes.md    Include timestamps in output
-  hark --format srt subs.srt    Output as SRT subtitles
+  hark                                  Record and output to stdout
+  hark output.txt                       Record and save to file
+  hark --lang de speech.md              Record with German language
+  hark --model large-v3 out.txt         Use large model for better accuracy
+  hark --timestamps notes.md            Include timestamps in output
+  hark --format srt subs.srt            Output as SRT subtitles
+  hark --diarize --input speaker out.txt  Transcribe with speaker detection
+  hark --diarize --speakers 3 meeting.md  Hint: 3 speakers expected
 """,
     )
 
@@ -167,6 +176,25 @@ Examples:
         help="Use custom configuration file",
     )
 
+    # Diarization options
+    diarization = parser.add_argument_group("Diarization Options")
+    diarization.add_argument(
+        "--diarize",
+        action="store_true",
+        help="Enable speaker diarization (requires --input speaker or both)",
+    )
+    diarization.add_argument(
+        "--speakers",
+        type=int,
+        metavar="N",
+        help="Expected number of speakers (helps diarization accuracy)",
+    )
+    diarization.add_argument(
+        "--no-interactive",
+        action="store_true",
+        help="Skip interactive speaker naming prompt",
+    )
+
     # Other options
     parser.add_argument(
         "--version",
@@ -175,6 +203,43 @@ Examples:
     )
 
     return parser
+
+
+def _validate_diarization_args(args: argparse.Namespace, config: HarkConfig, ui: UI) -> bool:
+    """
+    Validate diarization-related arguments.
+
+    Args:
+        args: Parsed CLI arguments.
+        config: Application configuration.
+        ui: UI handler for error messages.
+
+    Returns:
+        True if validation passes, False otherwise.
+    """
+    if not getattr(args, "diarize", False):
+        return True
+
+    # Check input source
+    input_source = getattr(args, "input_source", None) or config.recording.input_source
+    if input_source == "mic":
+        ui.error(
+            "Diarization requires --input speaker or --input both.\n"
+            "Use --input mic without --diarize for single-speaker recordings."
+        )
+        return False
+
+    # Check dependencies
+    try:
+        import whisperx  # type: ignore[import-not-found]  # noqa: F401
+    except ImportError as e:
+        raise DependencyMissingError() from e
+
+    # Check HF token
+    if not config.diarization.hf_token:
+        raise MissingTokenError()
+
+    return True
 
 
 def _wait_for_start_signal(ui: UI) -> bool:
@@ -252,7 +317,12 @@ def _record_audio(ui: UI, config: HarkConfig) -> tuple[Path, float] | None:
     return audio_path, duration
 
 
-def _preprocess_audio(ui: UI, config: HarkConfig, audio_path: Path) -> tuple[np.ndarray, float]:
+def _preprocess_audio(
+    ui: UI,
+    config: HarkConfig,
+    audio_path: Path,
+    preserve_stereo: bool = False,
+) -> tuple[np.ndarray, float]:
     """
     Preprocess recorded audio.
 
@@ -260,6 +330,7 @@ def _preprocess_audio(ui: UI, config: HarkConfig, audio_path: Path) -> tuple[np.
         ui: UI handler.
         config: Application configuration.
         audio_path: Path to audio file.
+        preserve_stereo: If True, preserve stereo channels for diarization.
 
     Returns:
         Tuple of (processed_audio, silence_trimmed_seconds).
@@ -270,6 +341,7 @@ def _preprocess_audio(ui: UI, config: HarkConfig, audio_path: Path) -> tuple[np.
     processed_audio, preprocess_result = preprocessor.process(
         audio_path=audio_path,
         sample_rate=config.recording.sample_rate,
+        preserve_stereo=preserve_stereo,
     )
 
     if config.preprocessing.noise_reduction.enabled:
@@ -319,10 +391,84 @@ def _transcribe_audio(ui: UI, config: HarkConfig, audio: np.ndarray) -> Transcri
     )
 
 
+def _diarize_audio(
+    ui: UI,
+    config: HarkConfig,
+    audio: np.ndarray,
+    num_speakers: int | None = None,
+) -> DiarizationResult:
+    """
+    Transcribe and diarize audio using WhisperX.
+
+    Args:
+        ui: UI handler.
+        config: Application configuration.
+        audio: Processed audio data.
+        num_speakers: Expected number of speakers (hint).
+
+    Returns:
+        DiarizationResult with speaker-labeled segments.
+    """
+    from hark.diarizer import Diarizer
+
+    ui.info(f"\nLoading Whisper model '{config.whisper.model}' with diarization...")
+
+    diarizer = Diarizer(
+        model_name=config.whisper.model,
+        device=config.whisper.device,
+        hf_token=config.diarization.hf_token,
+        num_speakers=num_speakers,
+        model_cache_dir=config.model_cache_dir,
+    )
+
+    ui.info("Model loaded. Transcribing and diarizing...")
+
+    language = config.whisper.language if config.whisper.language != "auto" else None
+    return diarizer.transcribe_and_diarize(
+        audio=audio,
+        sample_rate=config.recording.sample_rate,
+        language=language,
+    )
+
+
+def _process_stereo_diarization(
+    ui: UI,
+    config: HarkConfig,
+    audio: np.ndarray,
+    num_speakers: int | None = None,
+) -> DiarizationResult:
+    """
+    Process stereo audio with separate handling for local/remote channels.
+
+    Args:
+        ui: UI handler.
+        config: Application configuration.
+        audio: Stereo audio data (L=mic, R=speaker).
+        num_speakers: Expected number of remote speakers.
+
+    Returns:
+        DiarizationResult with all speakers labeled.
+    """
+    from hark.stereo_processor import StereoProcessor
+
+    ui.info("\nProcessing stereo audio (L=mic, R=speaker)...")
+
+    processor = StereoProcessor(config=config, num_speakers=num_speakers)
+
+    ui.info(f"Loading Whisper model '{config.whisper.model}'...")
+    ui.info("Transcribing local channel...")
+    ui.info("Diarizing remote channel...")
+
+    return processor.process(
+        stereo_audio=audio,
+        sample_rate=config.recording.sample_rate,
+    )
+
+
 def _write_output(
     ui: UI,
     config: HarkConfig,
-    result: TranscriptionResult,
+    result: TranscriptionResult | DiarizationResult,
     output_file: str | None,
 ) -> None:
     """
@@ -355,7 +501,15 @@ def _write_output(
             ui.transcription_complete(result, None)
 
 
-def run_workflow(config: HarkConfig, output_file: str | None, ui: UI, verbose: bool) -> int:
+def run_workflow(
+    config: HarkConfig,
+    output_file: str | None,
+    ui: UI,
+    verbose: bool,
+    diarize: bool = False,
+    num_speakers: int | None = None,
+    no_interactive: bool = False,
+) -> int:
     """
     Run the main recording/transcription workflow.
 
@@ -364,6 +518,9 @@ def run_workflow(config: HarkConfig, output_file: str | None, ui: UI, verbose: b
         output_file: Output file path (None for stdout).
         ui: UI handler.
         verbose: Enable verbose output.
+        diarize: Enable speaker diarization.
+        num_speakers: Expected number of speakers (hint for diarization).
+        no_interactive: Skip interactive speaker naming.
 
     Returns:
         Exit code.
@@ -389,10 +546,36 @@ def run_workflow(config: HarkConfig, output_file: str | None, ui: UI, verbose: b
         return EXIT_ERROR
 
     # Preprocess audio
-    processed_audio, _ = _preprocess_audio(ui, config, audio_path)
+    # Preserve stereo if diarizing with --input both (need separate channels)
+    preserve_stereo = diarize and config.recording.input_source == "both"
+    processed_audio, _ = _preprocess_audio(ui, config, audio_path, preserve_stereo=preserve_stereo)
 
-    # Transcribe
-    result = _transcribe_audio(ui, config, processed_audio)
+    # Transcribe or diarize
+    result: TranscriptionResult | DiarizationResult
+    if diarize:
+        if config.recording.input_source == "both":
+            # Stereo mode: process channels separately
+            result = _process_stereo_diarization(ui, config, processed_audio, num_speakers)
+        else:
+            # Mono mode (speaker input): diarize directly
+            result = _diarize_audio(ui, config, processed_audio, num_speakers)
+
+        # Show speaker summary
+        ui.info(f"\nDetected {len(result.speakers)} speaker(s): {', '.join(result.speakers)}")
+
+        # Interactive speaker naming (unless --no-interactive)
+        if not no_interactive:
+            from hark.interactive import interactive_speaker_naming
+
+            local_speaker = config.diarization.local_speaker_name or "SPEAKER_00"
+            result = interactive_speaker_naming(
+                result,
+                quiet=config.interface.quiet,
+                local_speaker_name=local_speaker,
+                ui=ui,
+            )
+    else:
+        result = _transcribe_audio(ui, config, processed_audio)
 
     # Write output
     _write_output(ui, config, result, output_file)
@@ -437,11 +620,23 @@ def main(argv: list[str] | None = None) -> int:
                 ui.error(error)
             return EXIT_ERROR
 
+        # Validate diarization args
+        if not _validate_diarization_args(args, config, ui):
+            return EXIT_ERROR
+
         # Ensure directories exist
         ensure_directories(config)
 
         # Run main workflow
-        return run_workflow(config, args.output_file, ui, verbose=args.verbose)
+        return run_workflow(
+            config,
+            args.output_file,
+            ui,
+            verbose=args.verbose,
+            diarize=getattr(args, "diarize", False),
+            num_speakers=getattr(args, "speakers", None),
+            no_interactive=getattr(args, "no_interactive", False),
+        )
 
     except KeyboardInterrupt:
         ui.info("\nCancelled.")

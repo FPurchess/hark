@@ -36,6 +36,9 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+diarization = [
+    "whisperx>=3.1.0",
+]
 test = [
     "pytest>=7.0.0",
     "pytest-cov>=4.0.0",

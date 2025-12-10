@@ -119,8 +119,11 @@ def trim_silence(
     """
     Trim leading/trailing silence and compress long internal silences.
 
+    For stereo audio, uses combined channel energy to determine silence regions,
+    then trims both channels identically to keep them synchronized.
+
     Args:
-        audio: Audio data as numpy array.
+        audio: Audio data as numpy array (mono or stereo).
         sample_rate: Sample rate in Hz.
         threshold_db: Silence threshold in dB.
         min_silence_duration: Minimum silence duration to consider (unused, kept for API).
@@ -131,14 +134,23 @@ def trim_silence(
     if len(audio) == 0:
         return audio, 0.0
 
-    original_duration = len(audio) / sample_rate
+    is_stereo = audio.ndim == 2
+
+    # For silence detection, use mono (combined channels for stereo)
+    if is_stereo:
+        # Use max of both channels for silence detection
+        detection_audio = np.max(np.abs(audio), axis=1)
+        original_duration = audio.shape[0] / sample_rate
+    else:
+        detection_audio = audio
+        original_duration = len(audio) / sample_rate
 
     try:
         # Use librosa for silence detection
         # top_db is the threshold below reference to consider as silence
         # Reference is the maximum amplitude
         intervals = librosa.effects.split(
-            audio,
+            detection_audio,
             top_db=abs(threshold_db),
             frame_length=2048,
             hop_length=512,
@@ -149,20 +161,37 @@ def trim_silence(
             return audio, 0.0
 
         # Concatenate non-silent segments with small gaps
-        trimmed_parts = []
         gap_samples = int(sample_rate * 0.1)  # 100ms gap between segments
-        silence_gap = np.zeros(gap_samples, dtype=np.float32)
 
-        for i, (start, end) in enumerate(intervals):
-            trimmed_parts.append(audio[start:end])
-            if i < len(intervals) - 1:
-                trimmed_parts.append(silence_gap)
+        if is_stereo:
+            trimmed_parts: list[np.ndarray] = []
+            silence_gap = np.zeros((gap_samples, 2), dtype=np.float32)
 
-        if not trimmed_parts:
-            return audio, 0.0
+            for i, (start, end) in enumerate(intervals):
+                trimmed_parts.append(audio[start:end])
+                if i < len(intervals) - 1:
+                    trimmed_parts.append(silence_gap)
 
-        trimmed = np.concatenate(trimmed_parts)
-        trimmed_duration = len(trimmed) / sample_rate
+            if not trimmed_parts:
+                return audio, 0.0
+
+            trimmed = np.concatenate(trimmed_parts, axis=0)
+            trimmed_duration = trimmed.shape[0] / sample_rate
+        else:
+            trimmed_parts_mono: list[np.ndarray] = []
+            silence_gap_mono = np.zeros(gap_samples, dtype=np.float32)
+
+            for i, (start, end) in enumerate(intervals):
+                trimmed_parts_mono.append(audio[start:end])
+                if i < len(intervals) - 1:
+                    trimmed_parts_mono.append(silence_gap_mono)
+
+            if not trimmed_parts_mono:
+                return audio, 0.0
+
+            trimmed = np.concatenate(trimmed_parts_mono)
+            trimmed_duration = len(trimmed) / sample_rate
+
         seconds_trimmed = original_duration - trimmed_duration
 
         return trimmed.astype(np.float32), max(0.0, seconds_trimmed)
@@ -188,6 +217,7 @@ class AudioPreprocessor:
         audio_path: Path,
         sample_rate: int,
         progress_callback: Callable[[str, float], None] | None = None,
+        preserve_stereo: bool = False,
     ) -> tuple[np.ndarray, PreprocessingResult]:
         """
         Process audio through the preprocessing pipeline.
@@ -196,6 +226,8 @@ class AudioPreprocessor:
             audio_path: Path to the audio file.
             sample_rate: Expected sample rate.
             progress_callback: Callback for progress updates (step_name, progress).
+            preserve_stereo: If True, preserve stereo channels instead of converting to mono.
+                           Each channel is processed independently but kept synchronized.
 
         Returns:
             Tuple of (processed_audio, result_info).
@@ -207,20 +239,30 @@ class AudioPreprocessor:
         try:
             audio, file_sr = sf.read(audio_path, dtype="float32")
 
-            # Handle stereo by converting to mono
-            if len(audio.shape) > 1:
+            is_stereo = audio.ndim == 2 and audio.shape[1] == 2
+
+            if is_stereo and not preserve_stereo:
+                # Convert stereo to mono by averaging channels
                 audio = np.mean(audio, axis=1)
+                is_stereo = False
 
             # Resample if needed
             if file_sr != sample_rate:
-                audio = librosa.resample(audio, orig_sr=file_sr, target_sr=sample_rate)
+                if is_stereo:
+                    # Resample each channel separately
+                    left = librosa.resample(audio[:, 0], orig_sr=file_sr, target_sr=sample_rate)
+                    right = librosa.resample(audio[:, 1], orig_sr=file_sr, target_sr=sample_rate)
+                    audio = np.column_stack((left, right))
+                else:
+                    audio = librosa.resample(audio, orig_sr=file_sr, target_sr=sample_rate)
 
             audio = audio.astype(np.float32)
 
         except Exception as e:
             raise PreprocessingError(f"Failed to load audio file: {e}") from e
 
-        original_duration = len(audio) / sample_rate
+        original_duration = audio.shape[0] / sample_rate if is_stereo else len(audio) / sample_rate
+
         noise_reduction_applied = False
         normalization_applied = False
         silence_trimmed = 0.0
@@ -230,11 +272,25 @@ class AudioPreprocessor:
             if progress_callback:
                 progress_callback("noise_reduction", 0.0)
 
-            audio = reduce_noise(
-                audio,
-                sample_rate,
-                strength=self._config.noise_reduction.strength,
-            )
+            if is_stereo:
+                # Process each channel separately
+                left = reduce_noise(
+                    audio[:, 0],
+                    sample_rate,
+                    strength=self._config.noise_reduction.strength,
+                )
+                right = reduce_noise(
+                    audio[:, 1],
+                    sample_rate,
+                    strength=self._config.noise_reduction.strength,
+                )
+                audio = np.column_stack((left, right))
+            else:
+                audio = reduce_noise(
+                    audio,
+                    sample_rate,
+                    strength=self._config.noise_reduction.strength,
+                )
             noise_reduction_applied = True
 
             if progress_callback:
@@ -245,16 +301,28 @@ class AudioPreprocessor:
             if progress_callback:
                 progress_callback("normalization", 0.0)
 
-            audio = normalize_audio(
-                audio,
-                target_db=self._config.normalization.target_level_db,
-            )
+            if is_stereo:
+                # Process each channel separately
+                left = normalize_audio(
+                    audio[:, 0],
+                    target_db=self._config.normalization.target_level_db,
+                )
+                right = normalize_audio(
+                    audio[:, 1],
+                    target_db=self._config.normalization.target_level_db,
+                )
+                audio = np.column_stack((left, right))
+            else:
+                audio = normalize_audio(
+                    audio,
+                    target_db=self._config.normalization.target_level_db,
+                )
             normalization_applied = True
 
             if progress_callback:
                 progress_callback("normalization", 1.0)
 
-        # Apply silence trimming
+        # Apply silence trimming (handles stereo natively)
         if self._config.silence_trimming.enabled:
             if progress_callback:
                 progress_callback("silence_trimming", 0.0)
@@ -269,7 +337,7 @@ class AudioPreprocessor:
             if progress_callback:
                 progress_callback("silence_trimming", 1.0)
 
-        processed_duration = len(audio) / sample_rate
+        processed_duration = audio.shape[0] / sample_rate if is_stereo else len(audio) / sample_rate
 
         result = PreprocessingResult(
             original_duration=original_duration,

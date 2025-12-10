@@ -18,6 +18,7 @@ __all__ = [
     "PreprocessingConfig",
     "OutputConfig",
     "InterfaceConfig",
+    "DiarizationConfig",
     "HarkConfig",
     "get_default_config_path",
     "load_config",
@@ -31,6 +32,7 @@ from hark.constants import (
     DEFAULT_CHANNELS,
     DEFAULT_CONFIG_DIR,
     DEFAULT_CONFIG_PATH,
+    DEFAULT_DIARIZATION_MODEL,
     DEFAULT_ENCODING,
     DEFAULT_INPUT_SOURCE,
     DEFAULT_LANGUAGE,
@@ -42,6 +44,7 @@ from hark.constants import (
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_THRESHOLD_DB,
+    DEFAULT_SPEAKERS_DIR,
     DEFAULT_TARGET_LEVEL_DB,
     DEFAULT_TEMP_DIR,
     VALID_INPUT_SOURCES,
@@ -124,6 +127,16 @@ class InterfaceConfig:
 
 
 @dataclass
+class DiarizationConfig:
+    """Speaker diarization configuration."""
+
+    hf_token: str | None = None
+    model: str = DEFAULT_DIARIZATION_MODEL
+    local_speaker_name: str | None = None  # Name for SPEAKER_00 in --input both
+    speakers_dir: Path = field(default_factory=lambda: DEFAULT_SPEAKERS_DIR)
+
+
+@dataclass
 class HarkConfig:
     """Main configuration class."""
 
@@ -132,6 +145,7 @@ class HarkConfig:
     preprocessing: PreprocessingConfig = field(default_factory=PreprocessingConfig)
     output: OutputConfig = field(default_factory=OutputConfig)
     interface: InterfaceConfig = field(default_factory=InterfaceConfig)
+    diarization: DiarizationConfig = field(default_factory=DiarizationConfig)
     temp_directory: Path = DEFAULT_TEMP_DIR
     model_cache_dir: Path = DEFAULT_MODEL_CACHE_DIR
 
@@ -210,6 +224,15 @@ def _dict_to_config(data: dict[str, Any]) -> HarkConfig:
         cache = data["cache"]
         if "model_cache_dir" in cache:
             config.model_cache_dir = Path(cache["model_cache_dir"]).expanduser()
+
+    if "diarization" in data:
+        d = data["diarization"]
+        config.diarization = DiarizationConfig(
+            hf_token=d.get("hf_token"),
+            model=d.get("model", DEFAULT_DIARIZATION_MODEL),
+            local_speaker_name=d.get("local_speaker_name"),
+            speakers_dir=Path(d.get("speakers_dir", DEFAULT_SPEAKERS_DIR)).expanduser(),
+        )
 
     return config
 
@@ -431,6 +454,13 @@ performance:
 # Cache Settings
 cache:
   model_cache_dir: ~/.cache/hark/models
+
+# Speaker Diarization Settings (requires: pip install hark-cli[diarization])
+# diarization:
+#   hf_token: "hf_xxxxxxxxxxxxx"  # Required: HuggingFace token
+#   model: "pyannote/speaker-diarization-3.1"
+#   local_speaker_name: null  # Name for local mic in --input both (null = SPEAKER_00)
+#   speakers_dir: ~/.config/hark/speakers  # Voice profile storage
 """
 
     with open(config_path, "w") as f:

@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from hark.config import HarkConfig
+    from hark.diarizer import DiarizationResult
     from hark.transcriber import TranscriptionResult
 
 __all__ = [
@@ -222,7 +223,11 @@ class UI:
         # Use carriage return for in-place update
         print(f"\r  Transcribing: {bar} {pct:3d}%", end="", flush=True)
 
-    def transcription_complete(self, result: TranscriptionResult, output_path: str | None) -> None:
+    def transcription_complete(
+        self,
+        result: TranscriptionResult | DiarizationResult,
+        output_path: str | None,
+    ) -> None:
         """Print transcription complete summary."""
         if self._quiet:
             return
@@ -231,13 +236,29 @@ class UI:
         print()
         print()
 
-        check = self._color("\u2713 Transcription complete!", Color.GREEN)
+        # Check if this is a diarization result (has speakers attribute)
+        is_diarization = hasattr(result, "speakers")
+
+        if is_diarization:
+            check = self._color("\u2713 Diarization complete!", Color.GREEN)
+        else:
+            check = self._color("\u2713 Transcription complete!", Color.GREEN)
         print(check)
 
-        word_count = sum(1 for _ in result.text.split()) if result.text else 0
+        # Calculate word count from text or segments
+        if hasattr(result, "text") and result.text:
+            word_count = sum(1 for _ in result.text.split())
+        else:
+            # DiarizationResult: count words from segments
+            word_count = sum(len(seg.text.split()) for seg in result.segments if seg.text)
+
         print(f"  - Duration: {result.duration:.1f} seconds")
         print(f"  - Words: {word_count}")
         print(f"  - Language: {result.language} ({result.language_probability:.0%} confidence)")
+
+        # Show speaker count for diarization
+        if is_diarization:
+            print(f"  - Speakers: {len(result.speakers)}")  # type: ignore[union-attr]
 
         if output_path:
             print(f"  - Output: {output_path}")

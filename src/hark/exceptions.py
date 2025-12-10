@@ -16,6 +16,10 @@ __all__ = [
     "ModelDownloadError",
     "InsufficientDiskSpaceError",
     "OutputError",
+    "DiarizationError",
+    "DependencyMissingError",
+    "MissingTokenError",
+    "GatedModelError",
 ]
 
 
@@ -121,3 +125,58 @@ class OutputError(HarkError):
     """Output-related errors."""
 
     pass
+
+
+class DiarizationError(HarkError):
+    """Speaker diarization errors."""
+
+    pass
+
+
+class DependencyMissingError(DiarizationError):
+    """Required dependency for diarization is not installed."""
+
+    def __init__(self, message: str | None = None) -> None:
+        default_msg = (
+            "Diarization requires additional dependencies.\n\n"
+            "\033[1mInstall with:\033[0m\n"
+            "  \033[93mpip install hark-cli[diarization]\033[0m"
+        )
+        super().__init__(message or default_msg)
+
+
+class MissingTokenError(DiarizationError):
+    """HuggingFace token is required but not configured."""
+
+    def __init__(self, message: str | None = None) -> None:
+        default_msg = (
+            "Diarization requires a HuggingFace token.\n\n"
+            "\033[1mSet up your token:\033[0m\n"
+            "  1️⃣  Create account at \033[94mhttps://huggingface.co\033[0m\n"
+            "  2️⃣  Accept model licenses:\n"
+            "      • \033[94mhttps://huggingface.co/pyannote/segmentation-3.0\033[0m\n"
+            "      • \033[94mhttps://huggingface.co/pyannote/speaker-diarization-3.1\033[0m\n"
+            "  3️⃣  Create token at \033[94mhttps://huggingface.co/settings/tokens\033[0m\n"
+            "  4️⃣  Add to \033[93m~/.config/hark/config.yaml\033[0m:\n"
+            "      \033[2mdiarization:\n"
+            "        hf_token: your_token_here\033[0m"
+        )
+        super().__init__(message or default_msg)
+
+
+class GatedModelError(DiarizationError):
+    """Pyannote model access not granted - user must accept license on HuggingFace."""
+
+    def __init__(self, message: str | None = None) -> None:
+        default_msg = (
+            "Speaker diarization model access denied.\n\n"
+            "The pyannote models are gated and require accepting the license terms.\n\n"
+            "\033[1mTo fix this:\033[0m\n"
+            "  1️⃣  Visit \033[94mhttps://huggingface.co/pyannote/speaker-diarization-3.1\033[0m\n"
+            "  2️⃣  Log in with your HuggingFace account\n"
+            "  3️⃣  Click 'Agree and access repository' to accept the license\n"
+            "  4️⃣  Also accept the segmentation model license:\n"
+            "      \033[94mhttps://huggingface.co/pyannote/segmentation-3.0\033[0m\n\n"
+            "Then retry your command. ✨"
+        )
+        super().__init__(message or default_msg)

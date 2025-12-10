@@ -25,6 +25,8 @@ __all__ = [
     "DEFAULT_CACHE_DIR",
     "DEFAULT_MODEL_CACHE_DIR",
     "DEFAULT_TEMP_DIR",
+    "DEFAULT_SPEAKERS_DIR",
+    "DEFAULT_DIARIZATION_MODEL",
     "EXIT_SUCCESS",
     "EXIT_ERROR",
     "EXIT_INTERRUPT",
@@ -62,6 +64,10 @@ DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
 DEFAULT_CACHE_DIR = Path.home() / ".cache" / "hark"
 DEFAULT_MODEL_CACHE_DIR = DEFAULT_CACHE_DIR / "models"
 DEFAULT_TEMP_DIR = Path("/tmp/hark")
+DEFAULT_SPEAKERS_DIR = DEFAULT_CONFIG_DIR / "speakers"
+
+# Diarization defaults
+DEFAULT_DIARIZATION_MODEL = "pyannote/speaker-diarization-3.1"
 
 # Exit codes
 EXIT_SUCCESS = 0
