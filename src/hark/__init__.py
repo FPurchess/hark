@@ -33,4 +33,4 @@ for logger_name in [
 ]:
     logging.getLogger(logger_name).setLevel(logging.ERROR)
 
-__version__ = "0.1.0"
+__version__ = "0.2.0"
