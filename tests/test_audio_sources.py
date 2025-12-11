@@ -240,6 +240,72 @@ Source #1
             assert device is not None
             assert device.name == "What U Hear"
 
+    def test_prefers_default_sink_monitor(self) -> None:
+        """Should prefer the monitor for the default sink over other monitors."""
+        pactl_list_output = """\
+Source #1
+    Name: alsa_output.usb-device-A.analog-stereo.monitor
+    Description: Monitor of USB Device A
+
+Source #2
+    Name: alsa_output.usb-device-B.analog-stereo.monitor
+    Description: Monitor of USB Device B
+
+Source #3
+    Name: alsa_output.pci-hdmi.monitor
+    Description: Monitor of HDMI Output
+"""
+
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            if cmd == ["pactl", "get-default-sink"]:
+                result.returncode = 0
+                result.stdout = "alsa_output.usb-device-B.analog-stereo"
+            elif cmd == ["pactl", "list", "sources"]:
+                result.returncode = 0
+                result.stdout = pactl_list_output
+            else:
+                result.returncode = 1
+            return result
+
+        with patch("subprocess.run", side_effect=mock_run):
+            device = find_loopback_device()
+
+            assert device is not None
+            # Should select device B's monitor (the default sink's monitor)
+            assert device.pulse_source_name == "alsa_output.usb-device-B.analog-stereo.monitor"
+            assert "Device B" in device.name
+
+    def test_falls_back_to_first_monitor_when_no_default_sink(self) -> None:
+        """Should fall back to first monitor when default sink can't be determined."""
+        pactl_list_output = """\
+Source #1
+    Name: alsa_output.usb-device-A.analog-stereo.monitor
+    Description: Monitor of USB Device A
+
+Source #2
+    Name: alsa_output.usb-device-B.analog-stereo.monitor
+    Description: Monitor of USB Device B
+"""
+
+        def mock_run(cmd, **kwargs):
+            result = MagicMock()
+            if cmd == ["pactl", "get-default-sink"]:
+                result.returncode = 1  # Failed to get default sink
+            elif cmd == ["pactl", "list", "sources"]:
+                result.returncode = 0
+                result.stdout = pactl_list_output
+            else:
+                result.returncode = 1
+            return result
+
+        with patch("subprocess.run", side_effect=mock_run):
+            device = find_loopback_device()
+
+            assert device is not None
+            # Should fall back to first monitor
+            assert device.pulse_source_name == "alsa_output.usb-device-A.analog-stereo.monitor"
+
 
 class TestListLoopbackDevices:
     """Tests for list_loopback_devices function."""

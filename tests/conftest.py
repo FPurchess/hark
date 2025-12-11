@@ -367,3 +367,68 @@ def mock_soundfile() -> MagicMock:
     mock.read.return_value = (np.zeros(16000, dtype=np.float32), 16000)
 
     return mock
+
+
+@pytest.fixture
+def mock_stereo_config() -> MagicMock:
+    """Create mock HarkConfig for stereo processor tests."""
+    config = MagicMock()
+    config.whisper.model = "base"
+    config.whisper.device = "cpu"
+    config.whisper.language = "auto"
+    config.model_cache_dir = Path("/tmp/models")
+    config.diarization.hf_token = "test_token"
+    config.diarization.local_speaker_name = "LOCAL"
+    return config
+
+
+@pytest.fixture
+def diarized_segment_factory():
+    """Factory for creating test DiarizedSegment objects."""
+    from hark.diarizer import DiarizedSegment
+
+    def _make(
+        start: float,
+        end: float,
+        text: str,
+        speaker: str,
+        words: list | None = None,
+    ) -> DiarizedSegment:
+        return DiarizedSegment(
+            start=start,
+            end=end,
+            text=text,
+            speaker=speaker,
+            words=words or [],
+        )
+
+    return _make
+
+
+@pytest.fixture
+def sample_diarization_result():
+    """Create a sample DiarizationResult for testing."""
+    from hark.diarizer import DiarizationResult, DiarizedSegment
+
+    return DiarizationResult(
+        segments=[
+            DiarizedSegment(
+                start=0.0,
+                end=2.0,
+                text="Hello from speaker one.",
+                speaker="SPEAKER_01",
+                words=[],
+            ),
+            DiarizedSegment(
+                start=2.5,
+                end=4.0,
+                text="Response from speaker two.",
+                speaker="SPEAKER_02",
+                words=[],
+            ),
+        ],
+        speakers=["SPEAKER_01", "SPEAKER_02"],
+        language="en",
+        language_probability=0.95,
+        duration=4.0,
+    )

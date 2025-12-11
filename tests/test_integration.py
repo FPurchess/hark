@@ -422,6 +422,155 @@ class TestEndToEndFlow:
             assert "Format test" in output or "test" in output.lower()
 
 
+class TestDataFlowIntegration:
+    """Test component interactions without external deps."""
+
+    def test_preprocessor_output_valid_for_transcriber(self, speech_audio_file: Path) -> None:
+        """Preprocessor output should meet transcriber input requirements."""
+        config = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=True, strength=0.3),
+            normalization=NormalizationConfig(enabled=True, target_level_db=-20.0),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+
+        preprocessor = AudioPreprocessor(config)
+        audio, _ = preprocessor.process(speech_audio_file, sample_rate=16000)
+
+        # Verify audio meets transcriber requirements
+        assert audio.dtype == np.float32, "Audio must be float32"
+        assert audio.ndim == 1, "Audio must be mono (1D)"
+        assert len(audio) > 0, "Audio must have samples"
+        assert np.isfinite(audio).all(), "Audio must not contain NaN/Inf"
+
+    def test_preprocessor_output_valid_for_diarizer(self, speech_audio_file: Path) -> None:
+        """Preprocessor output should meet diarizer input requirements."""
+        config = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=True, strength=0.3),
+            normalization=NormalizationConfig(enabled=True, target_level_db=-20.0),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+
+        preprocessor = AudioPreprocessor(config)
+        audio, _ = preprocessor.process(speech_audio_file, sample_rate=16000)
+
+        # Verify audio meets diarizer requirements (same as transcriber)
+        assert audio.dtype == np.float32, "Audio must be float32"
+        assert audio.ndim == 1, "Audio must be mono (1D)"
+        assert len(audio) > 0, "Audio must have samples"
+
+    def test_stereo_audio_produces_two_channels(self, tmp_path: Path) -> None:
+        """Stereo audio should be loadable and splittable into two channels."""
+        # Create stereo audio with different content per channel
+        sample_rate = 16000
+        duration = 1.0
+        samples = int(sample_rate * duration)
+
+        # Left channel: 440Hz, Right channel: 880Hz
+        t = np.linspace(0, duration, samples)
+        left = np.sin(2 * np.pi * 440 * t).astype(np.float32)
+        right = np.sin(2 * np.pi * 880 * t).astype(np.float32)
+        stereo = np.column_stack([left, right])
+
+        audio_path = tmp_path / "stereo_test.wav"
+        sf.write(audio_path, stereo, sample_rate)
+
+        # Read back and verify channels are distinct
+        audio, sr = sf.read(audio_path, dtype="float32")
+        assert audio.shape[1] == 2, "Should have 2 channels"
+
+        left_channel = audio[:, 0]
+        right_channel = audio[:, 1]
+
+        # Channels should be different (different frequencies)
+        assert not np.allclose(left_channel, right_channel), "Channels should differ"
+
+        # Both channels should be valid for processing
+        assert left_channel.dtype == np.float32
+        assert right_channel.dtype == np.float32
+        assert len(left_channel) == len(right_channel) == samples
+
+
+class TestConfigWiring:
+    """Test configuration correctly affects components."""
+
+    def test_noise_reduction_config_affects_output(self, speech_audio_file: Path) -> None:
+        """Different noise reduction config should produce different output."""
+        config_on = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=True, strength=0.5),
+            normalization=NormalizationConfig(enabled=False),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+        config_off = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=False),
+            normalization=NormalizationConfig(enabled=False),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+
+        preprocessor_on = AudioPreprocessor(config_on)
+        preprocessor_off = AudioPreprocessor(config_off)
+
+        audio_on, result_on = preprocessor_on.process(speech_audio_file, sample_rate=16000)
+        audio_off, result_off = preprocessor_off.process(speech_audio_file, sample_rate=16000)
+
+        assert result_on.noise_reduction_applied is True
+        assert result_off.noise_reduction_applied is False
+        # Audio should be different (noise reduction modifies the signal)
+        assert not np.allclose(audio_on, audio_off, atol=1e-6)
+
+    def test_normalization_config_affects_output(self, speech_audio_file: Path) -> None:
+        """Different normalization config should produce different output."""
+        config_on = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=False),
+            normalization=NormalizationConfig(enabled=True, target_level_db=-20.0),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+        config_off = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=False),
+            normalization=NormalizationConfig(enabled=False),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+
+        preprocessor_on = AudioPreprocessor(config_on)
+        preprocessor_off = AudioPreprocessor(config_off)
+
+        audio_on, result_on = preprocessor_on.process(speech_audio_file, sample_rate=16000)
+        audio_off, result_off = preprocessor_off.process(speech_audio_file, sample_rate=16000)
+
+        assert result_on.normalization_applied is True
+        assert result_off.normalization_applied is False
+        # Audio should be different (normalization changes amplitude)
+        # Note: We can't use np.allclose because normalized audio may have same shape
+        # but different absolute values
+        assert np.abs(audio_on).max() != np.abs(audio_off).max()
+
+    def test_sample_rate_affects_output_length(self, tmp_path: Path) -> None:
+        """Different target sample rates should produce different output lengths."""
+        # Create a 48kHz audio file
+        source_rate = 48000
+        duration = 1.0
+        samples = int(source_rate * duration)
+        audio = np.sin(2 * np.pi * 440 * np.linspace(0, duration, samples))
+        audio = audio.astype(np.float32)
+
+        audio_path = tmp_path / "test_48k.wav"
+        sf.write(audio_path, audio, source_rate)
+
+        config = PreprocessingConfig(
+            noise_reduction=NoiseReductionConfig(enabled=False),
+            normalization=NormalizationConfig(enabled=False),
+            silence_trimming=SilenceTrimmingConfig(enabled=False),
+        )
+
+        preprocessor = AudioPreprocessor(config)
+
+        # Process at 16kHz
+        audio_16k, _ = preprocessor.process(audio_path, sample_rate=16000)
+
+        # Should be resampled to 16kHz (16000 samples for 1 second)
+        expected_samples = int(16000 * duration)
+        assert abs(len(audio_16k) - expected_samples) < 100  # Allow small tolerance
+
+
 class TestSilenceHandling:
     """Tests for handling silent audio."""
 

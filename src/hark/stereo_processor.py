@@ -2,10 +2,28 @@
 
 from __future__ import annotations
 
+import contextlib
+import io
+import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
+
+
+@contextlib.contextmanager
+def _suppress_output():
+    """Temporarily suppress stdout/stderr to hide noisy library output."""
+    old_stdout = sys.stdout
+    old_stderr = sys.stderr
+    try:
+        sys.stdout = io.StringIO()
+        sys.stderr = io.StringIO()
+        yield
+    finally:
+        sys.stdout = old_stdout
+        sys.stderr = old_stderr
+
 
 if TYPE_CHECKING:
     from hark.config import HarkConfig
@@ -279,13 +297,14 @@ class StereoProcessor:
         self._device = device
         compute_type = get_compute_type(device)
 
-        # Load model once
-        self._whisperx_model = whisperx.load_model(
-            self._config.whisper.model,
-            device=device,
-            compute_type=compute_type,
-            download_root=str(self._config.model_cache_dir),
-        )
+        # Load model once (suppress noisy version mismatch warnings)
+        with _suppress_output():
+            self._whisperx_model = whisperx.load_model(
+                self._config.whisper.model,
+                device=device,
+                compute_type=compute_type,
+                download_root=str(self._config.model_cache_dir),
+            )
 
         return self._whisperx_model, self._device
 
@@ -411,6 +430,7 @@ class StereoProcessor:
             DiarizationResult with speaker labels SPEAKER_01, SPEAKER_02, etc.
         """
         import whisperx  # type: ignore[import-not-found]
+        import whisperx.diarize  # type: ignore[import-not-found]
 
         from hark.diarizer import DiarizationResult, DiarizedSegment, WordSegment
         from hark.exceptions import DiarizationError, MissingTokenError
@@ -431,10 +451,11 @@ class StereoProcessor:
             detected_language = result.get("language", "unknown")
 
             # Align (get word-level timestamps)
-            model_a, metadata = whisperx.load_align_model(
-                language_code=detected_language,
-                device=device,
-            )
+            with _suppress_output():
+                model_a, metadata = whisperx.load_align_model(
+                    language_code=detected_language,
+                    device=device,
+                )
             result = whisperx.align(
                 result["segments"],
                 model_a,
@@ -444,18 +465,23 @@ class StereoProcessor:
                 return_char_alignments=False,
             )
 
-            # Diarize
-            diarize_model = whisperx.DiarizationPipeline(
-                use_auth_token=hf_token,
-                device=device,
-            )
+            # Diarize (suppress noisy version mismatch warnings)
+            with _suppress_output():
+                diarize_model = whisperx.diarize.DiarizationPipeline(
+                    use_auth_token=hf_token,
+                    device=device,
+                )
 
             diarize_kwargs = {}
             if self._num_speakers is not None:
                 diarize_kwargs["min_speakers"] = self._num_speakers
                 diarize_kwargs["max_speakers"] = self._num_speakers
 
-            diarize_segments = diarize_model(audio, **diarize_kwargs)
+            with _suppress_output():
+                diarize_segments = diarize_model(
+                    audio,
+                    **diarize_kwargs,  # pyrefly: ignore[bad-argument-type]
+                )
 
             # Assign speakers to words
             result = whisperx.assign_word_speakers(diarize_segments, result)
@@ -510,11 +536,14 @@ class StereoProcessor:
 
             duration = segments[-1].end if segments else 0.0
 
+            # If language was explicitly specified, confidence is 100%
+            language_probability = 1.0 if language else 0.0
+
             return DiarizationResult(
                 segments=segments,
                 speakers=sorted(speakers_seen),
                 language=detected_language,
-                language_probability=0.0,
+                language_probability=language_probability,
                 duration=duration,
             )
 

@@ -291,6 +291,10 @@ def merge_cli_args(config: HarkConfig, args: argparse.Namespace) -> HarkConfig:
     if getattr(args, "input_source", None) is not None:
         config.recording.input_source = args.input_source
 
+    # Auto-set channels to 2 when using 'both' input source (stereo required)
+    if config.recording.input_source == "both" and getattr(args, "channels", None) is None:
+        config.recording.channels = 2
+
     # Whisper options
     if getattr(args, "lang", None) is not None:
         config.whisper.language = args.lang

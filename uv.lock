@@ -1018,6 +1018,7 @@ dev = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "whisperx" },
 ]
 diarization = [
     { name = "whisperx" },
@@ -1028,6 +1029,7 @@ test = [
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
+    { name = "whisperx" },
 ]
 
 [package.metadata]
@@ -1049,7 +1051,9 @@ requires-dist = [
     { name = "ruff", marker = "extra == 'test'", specifier = ">=0.1.0" },
     { name = "sounddevice", specifier = ">=0.5.0" },
     { name = "soundfile", specifier = ">=0.12.0" },
+    { name = "whisperx", marker = "extra == 'dev'", specifier = ">=3.1.0" },
     { name = "whisperx", marker = "extra == 'diarization'", specifier = ">=3.1.0" },
+    { name = "whisperx", marker = "extra == 'test'", specifier = ">=3.1.0" },
 ]
 provides-extras = ["dev", "diarization", "test"]
 

@@ -42,12 +42,39 @@ class AudioSourceInfo:
     pulse_source_name: str | None = None  # PulseAudio source name for loopback
 
 
+def _get_default_sink() -> str | None:
+    """
+    Get the default PulseAudio/PipeWire sink name.
+
+    Returns:
+        The default sink name, or None if not found.
+    """
+    try:
+        env = os.environ.copy()
+        env["LC_ALL"] = "C"
+
+        result = subprocess.run(
+            ["pactl", "get-default-sink"],
+            capture_output=True,
+            text=True,
+            timeout=5,
+            env=env,
+        )
+        if result.returncode == 0:
+            return result.stdout.strip()
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
+        pass
+
+    return None
+
+
 def _get_pulseaudio_monitors() -> list[dict[str, str]]:
     """
     Get PulseAudio/PipeWire monitor sources via pactl.
 
     Returns:
-        List of dicts with 'name' and 'description' keys.
+        List of dicts with 'name' and 'description' keys,
+        sorted with the default sink's monitor first.
     """
     monitors: list[dict[str, str]] = []
 
@@ -85,6 +112,12 @@ def _get_pulseaudio_monitors() -> list[dict[str, str]]:
         # Don't forget the last source
         if current_source and ".monitor" in current_source.get("name", ""):
             monitors.append(current_source)
+
+        # Sort monitors to prefer the default sink's monitor
+        default_sink = _get_default_sink()
+        if default_sink:
+            default_monitor_name = f"{default_sink}.monitor"
+            monitors.sort(key=lambda m: 0 if m.get("name") == default_monitor_name else 1)
 
     except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
         pass

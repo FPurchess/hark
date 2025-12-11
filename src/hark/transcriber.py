@@ -5,12 +5,16 @@ from __future__ import annotations
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
 from hark.constants import DEFAULT_MODEL_CACHE_DIR, VALID_MODELS
 from hark.device import detect_best_device, get_compute_type
 from hark.exceptions import ModelDownloadError, ModelNotFoundError, TranscriptionError
+
+if TYPE_CHECKING:
+    from hark.backends.base import TranscriptionBackend
 
 __all__ = [
     "WordSegment",
@@ -51,7 +55,20 @@ class TranscriptionResult:
 
 
 class Transcriber:
-    """Transcription engine using faster-whisper."""
+    """Transcription engine using faster-whisper.
+
+    Supports dependency injection for testing via the `backend` parameter.
+    If no backend is provided, uses faster-whisper directly (default behavior).
+
+    Example with dependency injection:
+        from hark.backends import FasterWhisperBackend
+        backend = FasterWhisperBackend()
+        transcriber = Transcriber(backend=backend)
+
+    Example with mock for testing:
+        mock_backend = MagicMock(spec=TranscriptionBackend)
+        transcriber = Transcriber(backend=mock_backend)
+    """
 
     def __init__(
         self,
@@ -59,6 +76,7 @@ class Transcriber:
         device: str = "auto",
         compute_type: str | None = None,
         model_cache_dir: Path | None = None,
+        backend: TranscriptionBackend | None = None,
     ) -> None:
         """
         Initialize the transcriber.
@@ -68,6 +86,9 @@ class Transcriber:
             device: Compute device (auto, cpu, cuda, vulkan).
             compute_type: Compute type for inference (auto-detected if None).
             model_cache_dir: Directory for caching models.
+            backend: Optional backend for dependency injection. If provided,
+                     the backend handles model loading and transcription.
+                     If None, uses faster-whisper directly (default).
         """
         if model_name not in VALID_MODELS:
             raise ValueError(f"Invalid model '{model_name}'. Valid: {', '.join(VALID_MODELS)}")
@@ -78,6 +99,7 @@ class Transcriber:
         self._cache_dir = model_cache_dir or DEFAULT_MODEL_CACHE_DIR
         self._model = None
         self._actual_device: str | None = None
+        self._backend = backend
 
     def load_model(self) -> None:
         """
@@ -89,13 +111,6 @@ class Transcriber:
             ModelNotFoundError: If model cannot be found or loaded.
             ModelDownloadError: If model download fails.
         """
-        try:
-            from faster_whisper import WhisperModel
-        except ImportError as e:
-            raise ModelNotFoundError(
-                "faster-whisper is not installed. Install it with: pip install faster-whisper"
-            ) from e
-
         # Resolve device
         if self._requested_device == "auto":
             self._actual_device = detect_best_device()
@@ -105,8 +120,6 @@ class Transcriber:
         # Handle Vulkan - faster-whisper doesn't directly support it,
         # fall back to CPU for now
         if self._actual_device == "vulkan":
-            # Vulkan not directly supported by faster-whisper
-            # Could potentially use CPU with better optimization
             self._actual_device = "cpu"
 
         # Determine compute type
@@ -114,6 +127,30 @@ class Transcriber:
 
         # Ensure cache directory exists
         self._cache_dir.mkdir(parents=True, exist_ok=True)
+
+        # If using injected backend, delegate to it
+        if self._backend is not None:
+            try:
+                self._backend.load_model(
+                    model_name=self._model_name,
+                    device=self._actual_device,
+                    compute_type=compute_type,
+                    download_root=str(self._cache_dir),
+                )
+            except Exception as e:
+                error_str = str(e).lower()
+                if "download" in error_str or "network" in error_str:
+                    raise ModelDownloadError(f"Failed to download model: {e}") from e
+                raise ModelNotFoundError(f"Failed to load model: {e}") from e
+            return
+
+        # Default: use faster-whisper directly
+        try:
+            from faster_whisper import WhisperModel
+        except ImportError as e:
+            raise ModelNotFoundError(
+                "faster-whisper is not installed. Install it with: pip install faster-whisper"
+            ) from e
 
         try:
             self._model = WhisperModel(
@@ -152,10 +189,9 @@ class Transcriber:
         Raises:
             TranscriptionError: If transcription fails.
         """
-        if self._model is None:
+        # Ensure model is loaded
+        if not self.is_model_loaded():
             self.load_model()
-
-        assert self._model is not None  # for type checker after load_model()
 
         # Resample to 16kHz if needed (Whisper requirement)
         if sample_rate != 16000:
@@ -173,6 +209,44 @@ class Transcriber:
 
         # Calculate total duration for progress estimation
         total_duration = len(audio) / 16000
+
+        # If using injected backend, delegate to it
+        if self._backend is not None:
+            try:
+                result = self._backend.transcribe(
+                    audio=audio,
+                    language=language,
+                    word_timestamps=word_timestamps,
+                )
+
+                # Convert backend result to TranscriptionResult
+                segments = [
+                    TranscriptionSegment(
+                        start=seg.start,
+                        end=seg.end,
+                        text=seg.text,
+                        words=[
+                            WordSegment(start=w.start, end=w.end, word=w.word) for w in seg.words
+                        ],
+                    )
+                    for seg in result.segments
+                ]
+
+                if progress_callback:
+                    progress_callback(1.0)
+
+                return TranscriptionResult(
+                    text=result.text,
+                    segments=segments,
+                    language=result.language,
+                    language_probability=result.language_probability,
+                    duration=total_duration,
+                )
+            except Exception as e:
+                raise TranscriptionError(f"Transcription failed: {e}") from e
+
+        # Default path: use faster-whisper directly
+        assert self._model is not None  # for type checker after load_model()
 
         try:
             # Transcribe with faster-whisper
@@ -216,11 +290,14 @@ class Transcriber:
             if progress_callback:
                 progress_callback(1.0)
 
+            # If language was explicitly specified, confidence is 100%
+            language_probability = 1.0 if language else info.language_probability
+
             return TranscriptionResult(
                 text=" ".join(full_text_parts).strip(),
                 segments=segments,
                 language=info.language,
-                language_probability=info.language_probability,
+                language_probability=language_probability,
                 duration=total_duration,
             )
 
@@ -229,6 +306,8 @@ class Transcriber:
 
     def is_model_loaded(self) -> bool:
         """Check if the model is loaded."""
+        if self._backend is not None:
+            return self._backend.is_loaded()
         return self._model is not None
 
     @property

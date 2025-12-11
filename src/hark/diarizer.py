@@ -1,4 +1,8 @@
-"""Speaker diarization using WhisperX."""
+"""Speaker diarization using WhisperX.
+
+Supports dependency injection for testing via the `backend` parameter.
+If no backend is provided, uses WhisperX directly (default behavior).
+"""
 
 from __future__ import annotations
 
@@ -7,6 +11,7 @@ import io
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import numpy as np
 
@@ -18,6 +23,9 @@ from hark.exceptions import (
     GatedModelError,
     MissingTokenError,
 )
+
+if TYPE_CHECKING:
+    from hark.backends.base import DiarizationBackend
 
 
 @contextlib.contextmanager
@@ -80,7 +88,17 @@ class DiarizationResult:
 class Diarizer:
     """WhisperX-based transcription with speaker diarization.
 
-    Caches the loaded Whisper model for reuse across multiple calls.
+    Supports dependency injection for testing via the `backend` parameter.
+    If no backend is provided, uses WhisperX directly (default behavior).
+
+    Example with dependency injection:
+        from hark.backends import WhisperXBackend
+        backend = WhisperXBackend()
+        diarizer = Diarizer(backend=backend)
+
+    Example with mock for testing:
+        mock_backend = MagicMock(spec=DiarizationBackend)
+        diarizer = Diarizer(backend=mock_backend)
     """
 
     def __init__(
@@ -91,6 +109,7 @@ class Diarizer:
         hf_token: str | None = None,
         num_speakers: int | None = None,
         model_cache_dir: Path | None = None,
+        backend: DiarizationBackend | None = None,
     ) -> None:
         """
         Initialize the diarizer.
@@ -102,6 +121,9 @@ class Diarizer:
             hf_token: HuggingFace token for pyannote models.
             num_speakers: Expected number of speakers (helps accuracy).
             model_cache_dir: Directory for caching models.
+            backend: Optional backend for dependency injection. If provided,
+                     the backend handles model loading and diarization.
+                     If None, uses WhisperX directly (default).
         """
         if model_name not in VALID_MODELS:
             raise ValueError(f"Invalid model '{model_name}'. Valid: {', '.join(VALID_MODELS)}")
@@ -112,6 +134,7 @@ class Diarizer:
         self._hf_token = hf_token
         self._num_speakers = num_speakers
         self._cache_dir = model_cache_dir or DEFAULT_MODEL_CACHE_DIR
+        self._backend = backend
 
         # Cached models (lazy loaded)
         self._whisperx_model = None
@@ -189,19 +212,78 @@ class Diarizer:
             MissingTokenError: If HF token is not configured.
             DiarizationError: If diarization fails.
         """
+        # Ensure audio is float32
+        if audio.dtype != np.float32:
+            audio = audio.astype(np.float32)
+
+        # If using injected backend, delegate to it
+        if self._backend is not None:
+            # Load model if needed
+            if not self._backend.is_loaded():
+                self._actual_device = self._resolve_device()
+                self._actual_compute_type = self._compute_type or get_compute_type(
+                    self._actual_device
+                )
+                try:
+                    self._backend.load_model(
+                        model_name=self._model_name,
+                        device=self._actual_device,
+                        compute_type=self._actual_compute_type,
+                        download_root=str(self._cache_dir),
+                        hf_token=self._hf_token or "",
+                    )
+                except Exception as e:
+                    raise DiarizationError(f"Failed to load model: {e}") from e
+
+            try:
+                result = self._backend.transcribe_and_diarize(
+                    audio=audio,
+                    sample_rate=sample_rate,
+                    language=language,
+                    num_speakers=self._num_speakers,
+                )
+
+                # Convert backend result to DiarizationResult
+                segments = [
+                    DiarizedSegment(
+                        start=seg.start,
+                        end=seg.end,
+                        text=seg.text,
+                        speaker=seg.speaker,
+                        words=[
+                            WordSegment(
+                                start=w.start,
+                                end=w.end,
+                                word=w.word,
+                                speaker=seg.speaker,
+                            )
+                            for w in seg.words
+                        ],
+                    )
+                    for seg in result.segments
+                ]
+
+                return DiarizationResult(
+                    segments=segments,
+                    speakers=result.speakers,
+                    language=result.language,
+                    language_probability=result.language_probability,
+                    duration=result.duration,
+                )
+            except Exception as e:
+                raise DiarizationError(f"Diarization failed: {e}") from e
+
+        # Default path: use WhisperX directly
         self._check_dependencies()
         self._check_token()
 
         try:
             import whisperx  # type: ignore[import-not-found]
+            import whisperx.diarize  # type: ignore[import-not-found]
 
             # Load model (cached after first call)
             model = self._load_model()
             device = self._actual_device
-
-            # Ensure audio is float32 for whisperx
-            if audio.dtype != np.float32:
-                audio = audio.astype(np.float32)
 
             # Transcribe (suppress noisy library output)
             with _suppress_output():
@@ -241,13 +323,16 @@ class Diarizer:
                 diarize_kwargs["max_speakers"] = self._num_speakers
 
             with _suppress_output():
-                diarize_segments = diarize_model(audio, **diarize_kwargs)
+                diarize_segments = diarize_model(
+                    audio,
+                    **diarize_kwargs,  # pyrefly: ignore[bad-argument-type]
+                )
 
             # Assign speakers to words
             result = whisperx.assign_word_speakers(diarize_segments, result)
 
             # Convert to our data structures
-            return self._convert_result(result, detected_language)
+            return self._convert_result(result, detected_language, language)
 
         except (DependencyMissingError, MissingTokenError, GatedModelError):
             raise
@@ -257,9 +342,19 @@ class Diarizer:
     def _convert_result(
         self,
         whisperx_result: dict,
-        language: str,
+        detected_language: str,
+        explicit_language: str | None,
     ) -> DiarizationResult:
-        """Convert WhisperX output to DiarizationResult."""
+        """Convert WhisperX output to DiarizationResult.
+
+        Args:
+            whisperx_result: Raw result from WhisperX.
+            detected_language: Language detected by WhisperX.
+            explicit_language: Language explicitly specified by user (or None).
+
+        Returns:
+            Standardized DiarizationResult.
+        """
         segments: list[DiarizedSegment] = []
         speakers_seen: set[str] = set()
 
@@ -309,10 +404,13 @@ class Diarizer:
 
         duration = segments[-1].end if segments else 0.0
 
+        # If language was explicitly specified, confidence is 100%
+        language_probability = 1.0 if explicit_language else 0.0
+
         return DiarizationResult(
             segments=segments,
             speakers=sorted(speakers_seen),
-            language=language,
-            language_probability=0.0,  # WhisperX doesn't expose this easily
+            language=detected_language,
+            language_probability=language_probability,
             duration=duration,
         )

@@ -595,6 +595,309 @@ class TestCleanup:
         assert recorder._stream is None
 
 
+class TestMicCallback:
+    """Tests for _mic_callback method in dual-stream mode."""
+
+    def test_adds_to_buffer(self, tmp_path: Path) -> None:
+        """Should add audio data to mic buffer."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._start_time = 100.0
+
+        test_data = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
+
+        with patch("time.time", return_value=101.0):
+            recorder._mic_callback(test_data, 3, {}, sd.CallbackFlags())
+
+        assert len(recorder._mic_buffer) == 1
+        np.testing.assert_array_equal(recorder._mic_buffer[0], test_data)
+
+    def test_calls_level_callback_with_rms(self, tmp_path: Path) -> None:
+        """Should call level_callback with RMS value."""
+        callback = MagicMock()
+        recorder = AudioRecorder(
+            temp_dir=tmp_path, input_source="both", channels=2, level_callback=callback
+        )
+        recorder._is_recording = True
+        recorder._start_time = 100.0
+
+        # RMS of 0.5, 0.5, 0.5 = 0.5
+        test_data = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
+
+        with patch("time.time", return_value=101.0):
+            recorder._mic_callback(test_data, 3, {}, sd.CallbackFlags())
+
+        callback.assert_called_once()
+        assert abs(callback.call_args[0][0] - 0.5) < 0.01
+
+    def test_stops_at_max_duration(self, tmp_path: Path) -> None:
+        """Should stop recording when max duration reached."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2, max_duration=5)
+        recorder._is_recording = True
+        recorder._start_time = 100.0
+
+        test_data = np.array([[0.5]], dtype=np.float32)
+
+        # 6 seconds later - past max duration
+        with patch("time.time", return_value=106.0):
+            recorder._mic_callback(test_data, 1, {}, sd.CallbackFlags())
+
+        assert recorder._is_recording is False
+
+    def test_does_nothing_when_not_recording(self, tmp_path: Path) -> None:
+        """Should not add to buffer when not recording."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = False
+
+        test_data = np.array([[0.5]], dtype=np.float32)
+        recorder._mic_callback(test_data, 1, {}, sd.CallbackFlags())
+
+        assert len(recorder._mic_buffer) == 0
+
+
+class TestSpeakerCallback:
+    """Tests for _speaker_callback method in dual-stream mode."""
+
+    def test_adds_to_buffer(self, tmp_path: Path) -> None:
+        """Should add audio data to speaker buffer."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+
+        test_data = np.array([[0.3], [0.3], [0.3]], dtype=np.float32)
+        recorder._speaker_callback(test_data, 3, {}, sd.CallbackFlags())
+
+        assert len(recorder._speaker_buffer) == 1
+        np.testing.assert_array_equal(recorder._speaker_buffer[0], test_data)
+
+    def test_does_nothing_when_not_recording(self, tmp_path: Path) -> None:
+        """Should not add to buffer when not recording."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = False
+
+        test_data = np.array([[0.3]], dtype=np.float32)
+        recorder._speaker_callback(test_data, 1, {}, sd.CallbackFlags())
+
+        assert len(recorder._speaker_buffer) == 0
+
+
+class TestInterleaveBuffers:
+    """Tests for _interleave_buffers method."""
+
+    def test_creates_stereo_from_mono_chunks(self, tmp_path: Path) -> None:
+        """Should interleave mic and speaker into stereo."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._stop_interleave = MagicMock()
+        recorder._stop_interleave.is_set.side_effect = [False, True]  # Run once then stop
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        # Add matching chunks to buffers
+        mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
+        speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
+        recorder._mic_buffer = [mic_chunk]
+        recorder._speaker_buffer = [speaker_chunk]
+
+        recorder._interleave_buffers()
+
+        # Check that stereo was written
+        mock_file.write.assert_called_once()
+        written_data = mock_file.write.call_args[0][0]
+        assert written_data.shape == (2, 2)  # 2 samples, 2 channels
+        np.testing.assert_array_almost_equal(written_data[:, 0], [0.5, 0.5])  # Left = mic
+        np.testing.assert_array_almost_equal(written_data[:, 1], [0.3, 0.3])  # Right = speaker
+
+    def test_handles_unequal_chunk_lengths(self, tmp_path: Path) -> None:
+        """Should truncate to shorter chunk length."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._stop_interleave = MagicMock()
+        recorder._stop_interleave.is_set.side_effect = [False, True]
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        # Mic has 3 samples, speaker has 2
+        mic_chunk = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
+        speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
+        recorder._mic_buffer = [mic_chunk]
+        recorder._speaker_buffer = [speaker_chunk]
+
+        recorder._interleave_buffers()
+
+        written_data = mock_file.write.call_args[0][0]
+        assert written_data.shape[0] == 2  # Truncated to 2 samples
+
+    def test_increments_frames_written(self, tmp_path: Path) -> None:
+        """Should track frames written."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._frames_written = 0
+        recorder._stop_interleave = MagicMock()
+        recorder._stop_interleave.is_set.side_effect = [False, True]
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
+        speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
+        recorder._mic_buffer = [mic_chunk]
+        recorder._speaker_buffer = [speaker_chunk]
+
+        recorder._interleave_buffers()
+
+        assert recorder._frames_written == 2
+
+    def test_skips_when_buffers_empty(self, tmp_path: Path) -> None:
+        """Should not write when buffers are empty."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._stop_interleave = MagicMock()
+        recorder._stop_interleave.is_set.side_effect = [False, True]
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        # Empty buffers
+        recorder._mic_buffer = []
+        recorder._speaker_buffer = []
+
+        recorder._interleave_buffers()
+
+        mock_file.write.assert_not_called()
+
+    def test_handles_write_error_gracefully(self, tmp_path: Path) -> None:
+        """Should handle write errors without crashing."""
+        import soundfile as sf
+
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._stop_interleave = MagicMock()
+        recorder._stop_interleave.is_set.side_effect = [False, True]
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        mock_file.write.side_effect = sf.SoundFileError("Write failed")
+        recorder._sound_file = mock_file
+
+        mic_chunk = np.array([[0.5]], dtype=np.float32)
+        speaker_chunk = np.array([[0.3]], dtype=np.float32)
+        recorder._mic_buffer = [mic_chunk]
+        recorder._speaker_buffer = [speaker_chunk]
+
+        # Should not raise
+        recorder._interleave_buffers()
+
+
+class TestFlushRemainingBuffers:
+    """Tests for _flush_remaining_buffers method."""
+
+    def test_flushes_matched_buffers(self, tmp_path: Path) -> None:
+        """Should process remaining matched chunks."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
+        speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
+        recorder._mic_buffer = [mic_chunk]
+        recorder._speaker_buffer = [speaker_chunk]
+
+        recorder._flush_remaining_buffers()
+
+        mock_file.write.assert_called_once()
+
+    def test_clears_unmatched_buffers(self, tmp_path: Path) -> None:
+        """Should clear any unmatched remaining data."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        # Unequal number of chunks
+        recorder._mic_buffer = [np.array([[0.5]], dtype=np.float32)]
+        recorder._speaker_buffer = []  # No matching speaker data
+
+        recorder._flush_remaining_buffers()
+
+        # Buffers should be cleared
+        assert len(recorder._mic_buffer) == 0
+        assert len(recorder._speaker_buffer) == 0
+
+
+class TestDualStreamStop:
+    """Tests for stopping dual-stream recording."""
+
+    def test_stops_interleave_thread(self, tmp_path: Path) -> None:
+        """Should stop the interleave thread."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._temp_file = tmp_path / "test.wav"
+        recorder._temp_file.touch()
+
+        mock_thread = MagicMock()
+        recorder._interleave_thread = mock_thread
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        recorder.stop()
+
+        recorder._stop_interleave.set()
+        mock_thread.join.assert_called_once()
+
+    def test_closes_dual_streams(self, tmp_path: Path) -> None:
+        """Should close both mic and speaker streams."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._temp_file = tmp_path / "test.wav"
+        recorder._temp_file.touch()
+
+        mock_mic_stream = MagicMock()
+        mock_speaker_stream = MagicMock()
+        recorder._mic_stream = mock_mic_stream
+        recorder._speaker_stream = mock_speaker_stream
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        recorder.stop()
+
+        mock_mic_stream.stop.assert_called()
+        mock_mic_stream.close.assert_called()
+        mock_speaker_stream.stop.assert_called()
+        mock_speaker_stream.close.assert_called()
+
+    def test_handles_stream_stop_errors(self, tmp_path: Path) -> None:
+        """Should handle errors when stopping streams gracefully."""
+        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        recorder._is_recording = True
+        recorder._temp_file = tmp_path / "test.wav"
+        recorder._temp_file.touch()
+
+        mock_mic_stream = MagicMock()
+        mock_mic_stream.stop.side_effect = sd.PortAudioError("Stop failed")
+        recorder._mic_stream = mock_mic_stream
+
+        mock_file = MagicMock()
+        mock_file.closed = False
+        recorder._sound_file = mock_file
+
+        # Should not raise
+        result = recorder.stop()
+        assert result is not None
+
+
 class TestMultiSourceRecording:
     """Tests for multi-source recording (speaker and both modes)."""
 

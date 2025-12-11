@@ -111,9 +111,23 @@ class TestLoadModel:
 
     def test_faster_whisper_not_installed(self) -> None:
         """Should raise ModelNotFoundError if faster-whisper not installed."""
+        # Need to patch detect_best_device to avoid subprocess calls during test
+        # The import error should trigger when trying to import faster_whisper
+        original_import = (
+            __builtins__["__import__"]
+            if isinstance(__builtins__, dict)
+            else __builtins__.__import__
+        )
+
+        def selective_import(name, *args, **kwargs):
+            if name == "faster_whisper":
+                raise ImportError("No module named 'faster_whisper'")
+            return original_import(name, *args, **kwargs)
+
         with (
+            patch("hark.transcriber.detect_best_device", return_value="cpu"),
             patch.dict("sys.modules", {"faster_whisper": None}),
-            patch("builtins.__import__", side_effect=ImportError("No module")),
+            patch("builtins.__import__", side_effect=selective_import),
         ):
             transcriber = Transcriber()
             with pytest.raises(ModelNotFoundError) as exc_info:
@@ -411,6 +425,70 @@ class TestTranscribe:
             with pytest.raises(TranscriptionError) as exc_info:
                 transcriber.transcribe(sample_audio)
                 assert "transcription failed" in str(exc_info.value).lower()
+
+    def test_language_probability_100_when_language_specified(
+        self, sample_audio: np.ndarray
+    ) -> None:
+        """Should set language_probability to 1.0 when language is explicitly specified."""
+        mock_whisper_module = MagicMock()
+        mock_model = MagicMock()
+        mock_whisper_module.WhisperModel.return_value = mock_model
+
+        mock_segment = MagicMock()
+        mock_segment.start = 0.0
+        mock_segment.end = 1.0
+        mock_segment.text = "Hallo"
+        mock_segment.words = []
+
+        mock_info = MagicMock()
+        mock_info.language = "de"
+        mock_info.language_probability = 0.65  # Model's detected probability
+        mock_model.transcribe.return_value = (iter([mock_segment]), mock_info)
+
+        with (
+            patch("hark.transcriber.detect_best_device", return_value="cpu"),
+            patch.dict("sys.modules", {"faster_whisper": mock_whisper_module}),
+        ):
+            transcriber = Transcriber()
+            transcriber.load_model()
+            # Explicitly specify language
+            result = transcriber.transcribe(sample_audio, language="de")
+
+            # Should be 100% confidence since language was explicitly specified
+            assert result.language_probability == 1.0
+            assert result.language == "de"
+
+    def test_language_probability_from_model_when_auto_detect(
+        self, sample_audio: np.ndarray
+    ) -> None:
+        """Should use model's language_probability when language is auto-detected."""
+        mock_whisper_module = MagicMock()
+        mock_model = MagicMock()
+        mock_whisper_module.WhisperModel.return_value = mock_model
+
+        mock_segment = MagicMock()
+        mock_segment.start = 0.0
+        mock_segment.end = 1.0
+        mock_segment.text = "Hello"
+        mock_segment.words = []
+
+        mock_info = MagicMock()
+        mock_info.language = "en"
+        mock_info.language_probability = 0.73
+        mock_model.transcribe.return_value = (iter([mock_segment]), mock_info)
+
+        with (
+            patch("hark.transcriber.detect_best_device", return_value="cpu"),
+            patch.dict("sys.modules", {"faster_whisper": mock_whisper_module}),
+        ):
+            transcriber = Transcriber()
+            transcriber.load_model()
+            # No language specified - auto-detect
+            result = transcriber.transcribe(sample_audio, language=None)
+
+            # Should use model's detected probability
+            assert result.language_probability == 0.73
+            assert result.language == "en"
 
 
 class TestTranscriberMethods:

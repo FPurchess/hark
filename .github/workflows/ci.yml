@@ -50,5 +50,33 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra test
 
-      - name: Run tests
-        run: uv run pytest tests/ -x --tb=short
+      - name: Run tests (excluding contract tests)
+        run: uv run pytest tests/ -x --tb=short -m "not contract_test"
+
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libportaudio2 ffmpeg
+
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.11
+
+      - name: Install all dependencies (including optional)
+        run: uv sync --extra test --extra diarization
+        env:
+          # Prevent any model downloads during install
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"
+
+      - name: Run contract tests
+        run: uv run pytest tests/test_contracts.py -v --tb=short
+        env:
+          HF_HUB_OFFLINE: "1"
+          TRANSFORMERS_OFFLINE: "1"

@@ -45,6 +45,7 @@ test = [
     "ruff>=0.1.0",
     "pyrefly>=0.45.0",
     "pre-commit>=3.0.0",
+    "hark-cli[diarization]",
 ]
 dev = [
     "hark-cli[test]",
@@ -81,3 +82,8 @@ select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-v --cov=src/hark"
+markers = [
+    "contract_test: tests that verify external API contracts (may require optional deps)",
+    "integration: integration tests that test component interactions",
+    "slow: tests that take more than a few seconds",
+]

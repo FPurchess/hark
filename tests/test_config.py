@@ -270,6 +270,25 @@ class TestMergeCliArgs:
         config = merge_cli_args(default_config, empty_cli_args_namespace)
         assert config.recording.input_source == "mic"
 
+    def test_input_source_both_auto_sets_stereo(
+        self, default_config: HarkConfig, empty_cli_args_namespace: argparse.Namespace
+    ) -> None:
+        """Input source 'both' should auto-set channels to 2 (stereo)."""
+        empty_cli_args_namespace.input_source = "both"
+        empty_cli_args_namespace.channels = None
+        config = merge_cli_args(default_config, empty_cli_args_namespace)
+        assert config.recording.input_source == "both"
+        assert config.recording.channels == 2
+
+    def test_input_source_both_respects_explicit_channels(
+        self, default_config: HarkConfig, empty_cli_args_namespace: argparse.Namespace
+    ) -> None:
+        """Explicit channels arg should override auto-stereo for 'both' mode."""
+        empty_cli_args_namespace.input_source = "both"
+        empty_cli_args_namespace.channels = 2
+        config = merge_cli_args(default_config, empty_cli_args_namespace)
+        assert config.recording.channels == 2
+
 
 class TestValidateConfig:
     """Tests for validate_config function."""
