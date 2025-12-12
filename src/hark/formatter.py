@@ -1,14 +1,10 @@
 """Output formatters for hark."""
 
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING
 
+from hark.constants import UNKNOWN_LANGUAGE_PROBABILITY
+from hark.diarizer import DiarizationResult
 from hark.transcriber import TranscriptionResult
-
-if TYPE_CHECKING:
-    from hark.diarizer import DiarizationResult
 
 __all__ = [
     "OutputFormatter",
@@ -37,7 +33,7 @@ class OutputFormatter(ABC):
 
     def _is_diarization_result(self, result: TranscriptionResult | DiarizationResult) -> bool:
         """Check if result is a DiarizationResult."""
-        return hasattr(result, "speakers")
+        return isinstance(result, DiarizationResult)
 
 
 class PlainFormatter(OutputFormatter):
@@ -142,11 +138,18 @@ class MarkdownFormatter(OutputFormatter):
             lines.append("")
 
         # Add metadata footer
+        # Handle unknown language probability (from diarization backends)
+        if result.language_probability == UNKNOWN_LANGUAGE_PROBABILITY:
+            lang_str = f"*Language: {result.language}*  "
+        else:
+            lang_str = (
+                f"*Language: {result.language} ({result.language_probability:.0%} confidence)*  "
+            )
         lines.extend(
             [
                 "---",
                 "",
-                f"*Language: {result.language} ({result.language_probability:.0%} confidence)*  ",
+                lang_str,
                 f"*Duration: {result.duration:.1f}s*",
             ]
         )
@@ -210,13 +213,16 @@ class MarkdownFormatter(OutputFormatter):
         # Add metadata footer
         speaker_count = len(result.speakers)
         duration_str = self._format_duration(result.duration)
-        confidence = result.language_probability
+        # Handle unknown language probability (from diarization backends)
+        if result.language_probability == UNKNOWN_LANGUAGE_PROBABILITY:
+            lang_str = f"Language: {result.language}"
+        else:
+            lang_str = f"Language: {result.language} ({result.language_probability:.0%} confidence)"
         lines.extend(
             [
                 "---",
                 "",
-                f"*{speaker_count} speakers detected • Duration: {duration_str} • "
-                f"Language: {result.language} ({confidence:.0%} confidence)*",
+                f"*{speaker_count} speakers detected • Duration: {duration_str} • {lang_str}*",
             ]
         )
 

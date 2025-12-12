@@ -1,6 +1,5 @@
 """Platform detection utilities for cross-platform support."""
 
-
 import sys
 from enum import Enum
 

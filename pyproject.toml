@@ -13,6 +13,8 @@ classifiers = [
     "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
     "Operating System :: POSIX :: Linux",
     "Operating System :: MacOS",
+    "Operating System :: Microsoft :: Windows :: Windows 10",
+    "Operating System :: Microsoft :: Windows :: Windows 11",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
@@ -33,6 +35,12 @@ dependencies = [
 
     # Configuration
     "pyyaml>=6.0.1",
+
+    # PulseAudio integration (Linux)
+    "pulsectl>=24.0.0; sys_platform == 'linux'",
+
+    # WASAPI loopback (Windows)
+    "PyAudioWPatch>=0.2.12.7; sys_platform == 'win32'",
 ]
 
 [project.optional-dependencies]

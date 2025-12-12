@@ -1,7 +1,5 @@
 """Main CLI entry point for hark."""
 
-from __future__ import annotations
-
 import argparse
 import sys
 import time
@@ -28,6 +26,7 @@ from hark.config import (
     validate_config,
 )
 from hark.constants import (
+    DEFAULT_LOCAL_SPEAKER,
     EXIT_ERROR,
     EXIT_INTERRUPT,
     EXIT_SUCCESS,
@@ -373,6 +372,9 @@ def _transcribe_audio(ui: UI, config: HarkConfig, audio: np.ndarray) -> Transcri
         model_name=config.whisper.model,
         device=config.whisper.device,
         model_cache_dir=config.model_cache_dir,
+        beam_size=config.whisper.beam_size,
+        vad_filter=config.whisper.vad_filter,
+        vad_min_silence_ms=config.whisper.vad_min_silence_ms,
     )
     transcriber.load_model()
     ui.info("Model loaded.")
@@ -396,7 +398,7 @@ def _diarize_audio(
     config: HarkConfig,
     audio: np.ndarray,
     num_speakers: int | None = None,
-) -> DiarizationResult:
+) -> "DiarizationResult":
     """
     Transcribe and diarize audio using WhisperX.
 
@@ -436,7 +438,7 @@ def _process_stereo_diarization(
     config: HarkConfig,
     audio: np.ndarray,
     num_speakers: int | None = None,
-) -> DiarizationResult:
+) -> "DiarizationResult":
     """
     Process stereo audio with separate handling for local/remote channels.
 
@@ -468,7 +470,7 @@ def _process_stereo_diarization(
 def _write_output(
     ui: UI,
     config: HarkConfig,
-    result: TranscriptionResult | DiarizationResult,
+    result: "TranscriptionResult | DiarizationResult",
     output_file: str | None,
 ) -> None:
     """
@@ -567,7 +569,7 @@ def run_workflow(
         if not no_interactive:
             from hark.interactive import interactive_speaker_naming
 
-            local_speaker = config.diarization.local_speaker_name or "SPEAKER_00"
+            local_speaker = config.diarization.local_speaker_name or DEFAULT_LOCAL_SPEAKER
             result = interactive_speaker_naming(
                 result,
                 quiet=config.interface.quiet,

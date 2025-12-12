@@ -1,10 +1,10 @@
 """Tests for hark.keypress module."""
 
-from __future__ import annotations
-
 import io
 import sys
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from hark.keypress import (
     KeypressHandler,
@@ -13,7 +13,14 @@ from hark.keypress import (
     wait_for_keypress,
 )
 
+# Skip marker for POSIX-only tests (termios/tty/select don't exist on Windows)
+posix_only = pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="POSIX-only test (termios/tty/select not available on Windows)",
+)
 
+
+@posix_only
 class TestRawTerminal:
     """Tests for raw_terminal context manager."""
 
@@ -85,6 +92,7 @@ class TestRawTerminal:
                         mock_set.assert_called()
 
 
+@posix_only
 class TestWaitForKeypress:
     """Tests for wait_for_keypress function."""
 
@@ -153,6 +161,7 @@ class TestWaitForKeypress:
                         assert result is True
 
 
+@posix_only
 class TestCheckKeypressNowait:
     """Tests for check_keypress_nowait function."""
 
@@ -194,6 +203,7 @@ class TestCheckKeypressNowait:
                             assert result is False
 
 
+@posix_only
 class TestKeypressHandler:
     """Tests for KeypressHandler class."""
 
@@ -291,6 +301,7 @@ class TestKeypressHandler:
                                 handler.flush_input()
 
 
+@posix_only
 class TestKeypressHandlerSettingsRestoration:
     """Tests for KeypressHandler settings restoration."""
 
@@ -330,3 +341,210 @@ class TestKeypressHandlerSettingsRestoration:
                             pass
 
                         mock_set.assert_called()
+
+
+class TestWindowsKeypress:
+    """Tests for Windows keypress handling via msvcrt.
+
+    These tests inject a mock msvcrt module since the real one
+    doesn't exist on Linux/macOS.
+    """
+
+    @pytest.fixture
+    def mock_msvcrt(self):
+        """Create a mock msvcrt module."""
+        mock = MagicMock()
+        return mock
+
+    def test_wait_for_keypress_windows_target_key_pressed(self, mock_msvcrt) -> None:
+        """Should return True when target key is pressed on Windows."""
+        mock_msvcrt.kbhit.return_value = True
+        mock_msvcrt.getwch.return_value = " "
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        # Inject mock msvcrt into keypress module
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            from hark.keypress import _wait_for_keypress_windows
+
+            result = _wait_for_keypress_windows(" ", None)
+            assert result is True
+            mock_msvcrt.kbhit.assert_called()
+            mock_msvcrt.getwch.assert_called_once()
+
+    def test_wait_for_keypress_windows_wrong_key(self, mock_msvcrt) -> None:
+        """Should return False when wrong key is pressed on Windows."""
+        mock_msvcrt.kbhit.return_value = True
+        mock_msvcrt.getwch.return_value = "x"
+
+        import hark.keypress as keypress_module
+
+        with patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True):
+            from hark.keypress import _wait_for_keypress_windows
+
+            result = _wait_for_keypress_windows(" ", None)
+            assert result is False
+
+    def test_wait_for_keypress_windows_timeout(self, mock_msvcrt) -> None:
+        """Should return False on timeout on Windows."""
+        mock_msvcrt.kbhit.return_value = False  # No key pressed
+
+        import hark.keypress as keypress_module
+
+        with patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True):
+            from hark.keypress import _wait_for_keypress_windows
+
+            result = _wait_for_keypress_windows(" ", timeout=0.05)
+            assert result is False
+
+    def test_check_keypress_nowait_windows_key_available(self, mock_msvcrt) -> None:
+        """Should return True when key is available on Windows."""
+        mock_msvcrt.kbhit.return_value = True
+        mock_msvcrt.getwch.return_value = " "
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            result = check_keypress_nowait(" ")
+            assert result is True
+
+    def test_check_keypress_nowait_windows_no_key(self, mock_msvcrt) -> None:
+        """Should return False when no key available on Windows."""
+        mock_msvcrt.kbhit.return_value = False
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            result = check_keypress_nowait(" ")
+            assert result is False
+
+
+class TestWindowsKeypressHandler:
+    """Tests for KeypressHandler on Windows."""
+
+    @pytest.fixture
+    def mock_msvcrt(self):
+        """Create a mock msvcrt module."""
+        return MagicMock()
+
+    def test_handler_enter_exit_windows(self, mock_msvcrt) -> None:
+        """KeypressHandler should work on Windows without terminal setup."""
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            with KeypressHandler() as handler:
+                assert handler._active is True
+            assert handler._active is False
+
+    def test_handler_get_key_windows_returns_char(self, mock_msvcrt) -> None:
+        """get_key should return pressed character on Windows."""
+        mock_msvcrt.kbhit.return_value = True
+        mock_msvcrt.getwch.return_value = "a"
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            with KeypressHandler() as handler:
+                result = handler.get_key(timeout=0.1)
+                assert result == "a"
+
+    def test_handler_get_key_windows_timeout(self, mock_msvcrt) -> None:
+        """get_key should return None on timeout on Windows."""
+        mock_msvcrt.kbhit.return_value = False
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            with KeypressHandler() as handler:
+                result = handler.get_key(timeout=0.05)
+                assert result is None
+
+    def test_handler_flush_input_windows(self, mock_msvcrt) -> None:
+        """flush_input should consume pending keys on Windows."""
+        # Simulate 3 pending keys then none
+        mock_msvcrt.kbhit.side_effect = [True, True, True, False]
+        mock_msvcrt.getch.return_value = b"x"
+
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        import hark.keypress as keypress_module
+
+        with (
+            patch.object(keypress_module, "is_windows", return_value=True),
+            patch.object(keypress_module, "msvcrt", mock_msvcrt, create=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            with KeypressHandler() as handler:
+                handler.flush_input()
+                assert mock_msvcrt.getch.call_count == 3
+
+
+class TestWindowsRawTerminal:
+    """Tests for raw_terminal on Windows."""
+
+    def test_raw_terminal_windows_is_noop(self) -> None:
+        """raw_terminal should be a no-op on Windows."""
+        mock_stdin = MagicMock()
+        mock_stdin.isatty.return_value = True
+
+        with (
+            patch("hark.keypress.is_windows", return_value=True),
+            patch.object(sys, "stdin", mock_stdin),
+        ):
+            # Should not raise and should not call any termios functions
+            with raw_terminal():
+                pass  # No-op on Windows
+
+
+class TestPlatformDetection:
+    """Tests for platform detection in keypress module."""
+
+    def test_is_windows_used_for_platform_check(self) -> None:
+        """Platform detection should use is_windows() from hark.platform."""
+        from hark.platform import is_windows
+
+        # Verify the function is importable and callable
+        result = is_windows()
+        assert isinstance(result, bool)

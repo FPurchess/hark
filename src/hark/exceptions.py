@@ -69,7 +69,12 @@ class NoLoopbackDeviceError(AudioError):
             "No system audio loopback device found.\n\n"
             "On Linux with PulseAudio, ensure a monitor source is available:\n"
             "  $ pactl list sources | grep -i monitor\n\n"
-            "On PipeWire, monitor sources should be automatically available."
+            "On PipeWire, monitor sources should be automatically available.\n\n"
+            "On macOS, install BlackHole for system audio capture:\n"
+            "  $ brew install blackhole-2ch\n\n"
+            "On Windows 10+, WASAPI loopback should work automatically.\n"
+            "  - Ensure your audio output device is working\n\n"
+            "See: https://github.com/FPurchess/hark#system-audio-capture"
         )
         super().__init__(message or default_msg)
 
@@ -149,6 +154,8 @@ class MissingTokenError(DiarizationError):
     """HuggingFace token is required but not configured."""
 
     def __init__(self, message: str | None = None) -> None:
+        from hark.constants import DEFAULT_CONFIG_PATH
+
         default_msg = (
             "Diarization requires a HuggingFace token.\n\n"
             "\033[1mSet up your token:\033[0m\n"
@@ -157,7 +164,7 @@ class MissingTokenError(DiarizationError):
             "      • \033[94mhttps://huggingface.co/pyannote/segmentation-3.0\033[0m\n"
             "      • \033[94mhttps://huggingface.co/pyannote/speaker-diarization-3.1\033[0m\n"
             "  3️⃣  Create token at \033[94mhttps://huggingface.co/settings/tokens\033[0m\n"
-            "  4️⃣  Add to \033[93m~/.config/hark/config.yaml\033[0m:\n"
+            f"  4️⃣  Add to \033[93m{DEFAULT_CONFIG_PATH}\033[0m:\n"
             "      \033[2mdiarization:\n"
             "        hf_token: your_token_here\033[0m"
         )

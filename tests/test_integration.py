@@ -4,8 +4,6 @@ These tests use small generated audio files to test the full preprocessing
 and formatting pipelines without mocking internal components.
 """
 
-from __future__ import annotations
-
 from pathlib import Path
 
 import numpy as np

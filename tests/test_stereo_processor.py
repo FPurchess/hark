@@ -1,7 +1,5 @@
 """Tests for hark.stereo_processor module."""
 
-from __future__ import annotations
-
 from unittest.mock import MagicMock, patch
 
 import numpy as np
@@ -12,7 +10,6 @@ from hark.stereo_processor import (
     ChannelAudio,
     StereoProcessor,
     _merge_overlapping_segments,
-    _suppress_output,
     merge_diarization_timelines,
     split_stereo_channels,
 )
@@ -46,50 +43,6 @@ class TestSplitStereoChannels:
 
         with pytest.raises(ValueError, match="2 channels"):
             split_stereo_channels(multichannel, sample_rate=16000)
-
-
-class TestSuppressOutput:
-    """Tests for _suppress_output context manager."""
-
-    def test_suppresses_stdout(self, capsys: pytest.CaptureFixture) -> None:
-        """Should suppress stdout within context."""
-        print("before")
-        with _suppress_output():
-            print("suppressed")
-        print("after")
-
-        captured = capsys.readouterr()
-        assert "before" in captured.out
-        assert "suppressed" not in captured.out
-        assert "after" in captured.out
-
-    def test_suppresses_stderr(self, capsys: pytest.CaptureFixture) -> None:
-        """Should suppress stderr within context."""
-        import sys
-
-        print("before", file=sys.stderr)
-        with _suppress_output():
-            print("suppressed", file=sys.stderr)
-        print("after", file=sys.stderr)
-
-        captured = capsys.readouterr()
-        assert "before" in captured.err
-        assert "suppressed" not in captured.err
-        assert "after" in captured.err
-
-    def test_restores_streams_on_exception(self) -> None:
-        """Should restore stdout/stderr even if exception occurs."""
-        import sys
-
-        original_stdout = sys.stdout
-        original_stderr = sys.stderr
-
-        with pytest.raises(ValueError):
-            with _suppress_output():
-                raise ValueError("test error")
-
-        assert sys.stdout is original_stdout
-        assert sys.stderr is original_stderr
 
 
 class TestStereoProcessorLanguageProbability:

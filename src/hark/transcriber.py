@@ -1,7 +1,5 @@
 """Transcription engine using faster-whisper."""
 
-from __future__ import annotations
-
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -9,7 +7,14 @@ from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hark.constants import DEFAULT_MODEL_CACHE_DIR, VALID_MODELS
+from hark.constants import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_MODEL_CACHE_DIR,
+    DEFAULT_SAMPLE_RATE,
+    DEFAULT_VAD_FILTER,
+    DEFAULT_VAD_MIN_SILENCE_MS,
+    VALID_MODELS,
+)
 from hark.device import detect_best_device, get_compute_type
 from hark.exceptions import ModelDownloadError, ModelNotFoundError, TranscriptionError
 
@@ -76,7 +81,10 @@ class Transcriber:
         device: str = "auto",
         compute_type: str | None = None,
         model_cache_dir: Path | None = None,
-        backend: TranscriptionBackend | None = None,
+        backend: "TranscriptionBackend | None" = None,
+        beam_size: int = DEFAULT_BEAM_SIZE,
+        vad_filter: bool = DEFAULT_VAD_FILTER,
+        vad_min_silence_ms: int = DEFAULT_VAD_MIN_SILENCE_MS,
     ) -> None:
         """
         Initialize the transcriber.
@@ -89,6 +97,9 @@ class Transcriber:
             backend: Optional backend for dependency injection. If provided,
                      the backend handles model loading and transcription.
                      If None, uses faster-whisper directly (default).
+            beam_size: Beam size for decoding (default: 5).
+            vad_filter: Enable VAD filtering (default: True).
+            vad_min_silence_ms: Minimum silence duration in ms for VAD (default: 500).
         """
         if model_name not in VALID_MODELS:
             raise ValueError(f"Invalid model '{model_name}'. Valid: {', '.join(VALID_MODELS)}")
@@ -100,6 +111,9 @@ class Transcriber:
         self._model = None
         self._actual_device: str | None = None
         self._backend = backend
+        self._beam_size = beam_size
+        self._vad_filter = vad_filter
+        self._vad_min_silence_ms = vad_min_silence_ms
 
     def load_model(self) -> None:
         """
@@ -168,7 +182,7 @@ class Transcriber:
     def transcribe(
         self,
         audio: np.ndarray,
-        sample_rate: int = 16000,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
         language: str | None = None,
         word_timestamps: bool = False,
         progress_callback: Callable[[float], None] | None = None,
@@ -194,21 +208,22 @@ class Transcriber:
             self.load_model()
 
         # Resample to 16kHz if needed (Whisper requirement)
-        if sample_rate != 16000:
+        if sample_rate != DEFAULT_SAMPLE_RATE:
             try:
                 import librosa
 
-                audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=16000)
+                audio = librosa.resample(audio, orig_sr=sample_rate, target_sr=DEFAULT_SAMPLE_RATE)
             except ImportError as e:
                 raise TranscriptionError(
-                    "Audio sample rate must be 16000Hz, or librosa must be installed for resampling"
+                    f"Audio sample rate must be {DEFAULT_SAMPLE_RATE}Hz, "
+                    "or librosa must be installed for resampling"
                 ) from e
 
         # Ensure float32
         audio = audio.astype(np.float32)
 
         # Calculate total duration for progress estimation
-        total_duration = len(audio) / 16000
+        total_duration = len(audio) / DEFAULT_SAMPLE_RATE
 
         # If using injected backend, delegate to it
         if self._backend is not None:
@@ -217,6 +232,9 @@ class Transcriber:
                     audio=audio,
                     language=language,
                     word_timestamps=word_timestamps,
+                    beam_size=self._beam_size,
+                    vad_filter=self._vad_filter,
+                    vad_min_silence_ms=self._vad_min_silence_ms,
                 )
 
                 # Convert backend result to TranscriptionResult
@@ -254,9 +272,9 @@ class Transcriber:
                 audio,
                 language=language,
                 word_timestamps=word_timestamps,
-                beam_size=5,
-                vad_filter=True,
-                vad_parameters={"min_silence_duration_ms": 500},
+                beam_size=self._beam_size,
+                vad_filter=self._vad_filter,
+                vad_parameters={"min_silence_duration_ms": self._vad_min_silence_ms},
             )
 
             # Collect segments

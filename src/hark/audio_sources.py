@@ -1,15 +1,17 @@
 """Audio source detection and management for hark."""
 
-from __future__ import annotations
-
-import os
+import contextlib
 import re
-import subprocess
 from dataclasses import dataclass
 from enum import Enum
+from functools import lru_cache
 from typing import Any, cast
 
 import sounddevice as sd
+
+from hark.audio_backends import RecordingConfig, get_loopback_backend
+from hark.audio_backends.base import LoopbackBackend
+from hark.platform import is_linux, is_macos, is_windows
 
 __all__ = [
     "InputSource",
@@ -34,95 +36,21 @@ class InputSource(Enum):
 class AudioSourceInfo:
     """Information about an audio source."""
 
-    device_index: int | None  # sounddevice index, None for PulseAudio sources
+    device_index: int | None  # sounddevice index, None for backend-managed devices
     name: str
     channels: int
     sample_rate: float
     is_loopback: bool
-    pulse_source_name: str | None = None  # PulseAudio source name for loopback
+    recording_config: RecordingConfig | None = None  # Platform-specific recording config
 
 
-def _get_default_sink() -> str | None:
-    """
-    Get the default PulseAudio/PipeWire sink name.
-
-    Returns:
-        The default sink name, or None if not found.
-    """
+@lru_cache(maxsize=1)
+def _get_loopback_backend() -> LoopbackBackend | None:
+    """Get loopback backend lazily, returning None on unsupported platforms."""
     try:
-        env = os.environ.copy()
-        env["LC_ALL"] = "C"
-
-        result = subprocess.run(
-            ["pactl", "get-default-sink"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env=env,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-
-    return None
-
-
-def _get_pulseaudio_monitors() -> list[dict[str, str]]:
-    """
-    Get PulseAudio/PipeWire monitor sources via pactl.
-
-    Returns:
-        List of dicts with 'name' and 'description' keys,
-        sorted with the default sink's monitor first.
-    """
-    monitors: list[dict[str, str]] = []
-
-    try:
-        # Use LC_ALL=C to get consistent English output regardless of locale
-        env = os.environ.copy()
-        env["LC_ALL"] = "C"
-
-        result = subprocess.run(
-            ["pactl", "list", "sources"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-            env=env,
-        )
-        if result.returncode != 0:
-            return monitors
-
-        current_source: dict[str, str] = {}
-        for line in result.stdout.splitlines():
-            line = line.strip()
-
-            # New source entry (LC_ALL=C ensures English output)
-            if line.startswith("Source #"):
-                if current_source and ".monitor" in current_source.get("name", ""):
-                    monitors.append(current_source)
-                current_source = {}
-
-            elif line.startswith("Name:"):
-                current_source["name"] = line.split(":", 1)[1].strip()
-
-            elif line.startswith("Description:"):
-                current_source["description"] = line.split(":", 1)[1].strip()
-
-        # Don't forget the last source
-        if current_source and ".monitor" in current_source.get("name", ""):
-            monitors.append(current_source)
-
-        # Sort monitors to prefer the default sink's monitor
-        default_sink = _get_default_sink()
-        if default_sink:
-            default_monitor_name = f"{default_sink}.monitor"
-            monitors.sort(key=lambda m: 0 if m.get("name") == default_monitor_name else 1)
-
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-
-    return monitors
+        return get_loopback_backend()
+    except NotImplementedError:
+        return None
 
 
 def _is_monitor_device(device_name: str) -> bool:
@@ -172,7 +100,7 @@ def find_microphone_device() -> AudioSourceInfo | None:
                 channels=int(device["max_input_channels"]),
                 sample_rate=float(device["default_samplerate"]),
                 is_loopback=False,
-                pulse_source_name=None,
+                recording_config=None,
             )
     except Exception:
         pass
@@ -184,23 +112,26 @@ def find_loopback_device() -> AudioSourceInfo | None:
     """
     Find a system audio loopback/monitor device.
 
-    On Linux, uses pactl to discover PulseAudio/PipeWire monitor sources.
+    On Linux, uses PulseAudio/PipeWire backend to discover monitor sources.
     Falls back to checking sounddevice for other platforms.
 
     Returns:
         AudioSourceInfo for the first loopback device found, or None if not found.
     """
-    # First, try PulseAudio/PipeWire monitors via pactl (Linux)
-    monitors = _get_pulseaudio_monitors()
-    if monitors:
-        monitor = monitors[0]  # Use first available monitor
+    # First, try platform-specific loopback backend
+    backend = _get_loopback_backend()
+    loopback_info = None
+    if backend is not None:
+        with contextlib.suppress(Exception):
+            loopback_info = backend.get_default_loopback()
+    if loopback_info is not None and backend is not None:
         return AudioSourceInfo(
-            device_index=None,  # Use pulse device, not index
-            name=monitor.get("description", monitor["name"]),
-            channels=2,  # Monitors are typically stereo
-            sample_rate=44100.0,  # Default, will be overridden by recorder
+            device_index=None,  # Backend device, not sounddevice index
+            name=loopback_info.name,
+            channels=loopback_info.channels,
+            sample_rate=loopback_info.sample_rate,
             is_loopback=True,
-            pulse_source_name=monitor["name"],
+            recording_config=backend.get_recording_config(loopback_info.device_id),
         )
 
     # Fallback: check sounddevice for loopback devices (other platforms)
@@ -214,7 +145,7 @@ def find_loopback_device() -> AudioSourceInfo | None:
                 channels=int(device["max_input_channels"]),
                 sample_rate=float(device["default_samplerate"]),
                 is_loopback=True,
-                pulse_source_name=None,
+                recording_config=None,  # No backend config for sounddevice fallback
             )
 
     return None
@@ -229,21 +160,24 @@ def list_loopback_devices() -> list[AudioSourceInfo]:
     """
     loopbacks: list[AudioSourceInfo] = []
 
-    # Get PulseAudio/PipeWire monitors
-    monitors = _get_pulseaudio_monitors()
-    for monitor in monitors:
+    # Get loopback devices via platform-specific backend
+    backend = _get_loopback_backend()
+    backend_devices = backend.list_loopback_devices() if backend else []
+    for device_info in backend_devices:
         loopbacks.append(
             AudioSourceInfo(
                 device_index=None,
-                name=monitor.get("description", monitor["name"]),
-                channels=2,
-                sample_rate=44100.0,
+                name=device_info.name,
+                channels=device_info.channels,
+                sample_rate=device_info.sample_rate,
                 is_loopback=True,
-                pulse_source_name=monitor["name"],
+                recording_config=(
+                    backend.get_recording_config(device_info.device_id) if backend else None
+                ),
             )
         )
 
-    # Also check sounddevice for any loopback devices
+    # Also check sounddevice for any loopback devices (other platforms)
     devices = sd.query_devices()
     for i, device in enumerate(devices):
         device = cast(dict[str, Any], device)
@@ -260,7 +194,7 @@ def list_loopback_devices() -> list[AudioSourceInfo]:
                     channels=int(device["max_input_channels"]),
                     sample_rate=float(device["default_samplerate"]),
                     is_loopback=True,
-                    pulse_source_name=None,
+                    recording_config=None,  # No backend config for sounddevice fallback
                 )
             )
 
@@ -308,27 +242,21 @@ def validate_source_availability(source: InputSource) -> list[str]:
         errors.append("No microphone device found")
 
     if source in (InputSource.SPEAKER, InputSource.BOTH) and loopback is None:
-        errors.append(
-            "No system audio loopback device found. "
-            "On Linux, ensure PulseAudio/PipeWire monitor source is available."
-        )
+        msg = "No system audio loopback device found. "
+        if is_linux():
+            msg += "Ensure PulseAudio/PipeWire monitor source is available."
+        elif is_macos():
+            msg += (
+                "Install BlackHole for system audio capture. "
+                "See https://github.com/ExistentialAudio/BlackHole for installation."
+            )
+        elif is_windows():
+            msg += (
+                "WASAPI loopback device not found. Requires Windows 10 or later. "
+                "Ensure your audio output device is working."
+            )
+        else:
+            msg += "System audio capture may not be supported on this platform."
+        errors.append(msg)
 
     return errors
-
-
-def setup_loopback_env(loopback: AudioSourceInfo) -> dict[str, str]:
-    """
-    Get environment variables needed for loopback recording.
-
-    Args:
-        loopback: The loopback device info.
-
-    Returns:
-        Dict of environment variables to set (may be empty).
-    """
-    env = os.environ.copy()
-
-    if loopback.pulse_source_name:
-        env["PULSE_SOURCE"] = loopback.pulse_source_name
-
-    return env

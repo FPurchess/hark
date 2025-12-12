@@ -1,7 +1,5 @@
 """Tests for hark.config module."""
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 from unittest.mock import patch
@@ -27,6 +25,7 @@ from hark.config import (
     validate_config,
 )
 from hark.constants import (
+    DEFAULT_BEAM_SIZE,
     DEFAULT_CHANNELS,
     DEFAULT_CONFIG_PATH,
     DEFAULT_INPUT_SOURCE,
@@ -35,6 +34,8 @@ from hark.constants import (
     DEFAULT_MODEL,
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_SAMPLE_RATE,
+    DEFAULT_VAD_FILTER,
+    DEFAULT_VAD_MIN_SILENCE_MS,
 )
 from hark.exceptions import ConfigError
 
@@ -56,6 +57,9 @@ class TestDataclassDefaults:
         assert config.model == DEFAULT_MODEL
         assert config.language == DEFAULT_LANGUAGE
         assert config.device == "auto"
+        assert config.beam_size == DEFAULT_BEAM_SIZE
+        assert config.vad_filter == DEFAULT_VAD_FILTER
+        assert config.vad_min_silence_ms == DEFAULT_VAD_MIN_SILENCE_MS
 
     def test_noise_reduction_config_defaults(self) -> None:
         """NoiseReductionConfig should have correct default values."""
@@ -356,6 +360,49 @@ class TestValidateConfig:
         assert len(errors) >= 1
         assert any("device" in e.lower() for e in errors)
 
+    def test_beam_size_zero(self, default_config: HarkConfig) -> None:
+        """Beam size of 0 should produce error."""
+        default_config.whisper.beam_size = 0
+        errors = validate_config(default_config)
+        assert len(errors) >= 1
+        assert any("beam" in e.lower() for e in errors)
+
+    def test_beam_size_negative(self, default_config: HarkConfig) -> None:
+        """Negative beam size should produce error."""
+        default_config.whisper.beam_size = -1
+        errors = validate_config(default_config)
+        assert len(errors) >= 1
+        assert any("beam" in e.lower() for e in errors)
+
+    def test_beam_size_valid(self, default_config: HarkConfig) -> None:
+        """Valid beam size should not produce error."""
+        default_config.whisper.beam_size = 1
+        errors = validate_config(default_config)
+        assert errors == []
+
+        default_config.whisper.beam_size = 10
+        errors = validate_config(default_config)
+        assert errors == []
+
+    def test_vad_min_silence_negative(self, default_config: HarkConfig) -> None:
+        """Negative VAD min silence should produce error."""
+        default_config.whisper.vad_min_silence_ms = -1
+        errors = validate_config(default_config)
+        assert len(errors) >= 1
+        assert any("vad" in e.lower() or "silence" in e.lower() for e in errors)
+
+    def test_vad_min_silence_zero_valid(self, default_config: HarkConfig) -> None:
+        """Zero VAD min silence should be valid."""
+        default_config.whisper.vad_min_silence_ms = 0
+        errors = validate_config(default_config)
+        assert errors == []
+
+    def test_vad_min_silence_positive_valid(self, default_config: HarkConfig) -> None:
+        """Positive VAD min silence should be valid."""
+        default_config.whisper.vad_min_silence_ms = 1000
+        errors = validate_config(default_config)
+        assert errors == []
+
     def test_noise_strength_negative(self, default_config: HarkConfig) -> None:
         """Noise strength < 0 should produce error."""
         default_config.preprocessing.noise_reduction.strength = -0.1
@@ -551,3 +598,45 @@ class TestConfigYamlParsing:
         config = load_config(config_file)
         assert config.recording.input_source == "both"
         assert config.recording.channels == 2
+
+    def test_parses_beam_size(self, tmp_path: Path) -> None:
+        """Should parse beam_size from YAML."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("whisper:\n  beam_size: 10")
+        config = load_config(config_file)
+        assert config.whisper.beam_size == 10
+
+    def test_parses_vad_filter(self, tmp_path: Path) -> None:
+        """Should parse vad_filter from YAML."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("whisper:\n  vad_filter: false")
+        config = load_config(config_file)
+        assert config.whisper.vad_filter is False
+
+    def test_parses_vad_min_silence_ms(self, tmp_path: Path) -> None:
+        """Should parse vad_min_silence_ms from YAML."""
+        config_file = tmp_path / "config.yaml"
+        config_file.write_text("whisper:\n  vad_min_silence_ms: 1000")
+        config = load_config(config_file)
+        assert config.whisper.vad_min_silence_ms == 1000
+
+    def test_parses_all_whisper_transcription_params(self, tmp_path: Path) -> None:
+        """Should parse all whisper transcription parameters."""
+        config_file = tmp_path / "config.yaml"
+        config_content = """\
+whisper:
+  model: small
+  language: en
+  device: cpu
+  beam_size: 8
+  vad_filter: true
+  vad_min_silence_ms: 750
+"""
+        config_file.write_text(config_content)
+        config = load_config(config_file)
+        assert config.whisper.model == "small"
+        assert config.whisper.language == "en"
+        assert config.whisper.device == "cpu"
+        assert config.whisper.beam_size == 8
+        assert config.whisper.vad_filter is True
+        assert config.whisper.vad_min_silence_ms == 750

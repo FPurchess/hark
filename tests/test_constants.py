@@ -1,5 +1,6 @@
 """Tests for hark.constants module."""
 
+import tempfile
 from pathlib import Path
 
 from hark.constants import (
@@ -18,12 +19,14 @@ from hark.constants import (
     DEFAULT_OUTPUT_FORMAT,
     DEFAULT_SAMPLE_RATE,
     DEFAULT_SILENCE_THRESHOLD_DB,
+    DEFAULT_SPEAKERS_DIR,
     DEFAULT_TARGET_LEVEL_DB,
     DEFAULT_TEMP_DIR,
     EXIT_ERROR,
     EXIT_INTERRUPT,
     EXIT_SUCCESS,
     MIN_RECORDING_DURATION,
+    UNKNOWN_LANGUAGE_PROBABILITY,
     VALID_MODELS,
     VALID_OUTPUT_FORMATS,
 )
@@ -131,8 +134,9 @@ class TestPathConstants:
         assert "hark" in str(DEFAULT_CONFIG_DIR)
 
     def test_temp_dir_path(self) -> None:
-        """DEFAULT_TEMP_DIR should be /tmp/hark."""
-        assert str(DEFAULT_TEMP_DIR) == "/tmp/hark"
+        """DEFAULT_TEMP_DIR should be in system temp directory."""
+        expected = Path(tempfile.gettempdir()) / "hark"
+        assert expected == DEFAULT_TEMP_DIR
 
 
 class TestAudioDefaults:
@@ -198,3 +202,70 @@ class TestOtherDefaults:
     def test_default_output_format(self) -> None:
         """DEFAULT_OUTPUT_FORMAT should be 'plain'."""
         assert DEFAULT_OUTPUT_FORMAT == "plain"
+
+
+class TestPlatformSpecificPaths:
+    """Tests for platform-specific path defaults.
+
+    Note: These tests verify the path computation logic. Since constants
+    are evaluated at import time, we test behavior for the current platform
+    and verify the values make sense.
+    """
+
+    def test_config_dir_absolute(self) -> None:
+        """DEFAULT_CONFIG_DIR should be an absolute path."""
+        assert DEFAULT_CONFIG_DIR.is_absolute()
+
+    def test_cache_dir_absolute(self) -> None:
+        """DEFAULT_CACHE_DIR should be an absolute path."""
+        assert DEFAULT_CACHE_DIR.is_absolute()
+
+    def test_temp_dir_absolute(self) -> None:
+        """DEFAULT_TEMP_DIR should be an absolute path."""
+        assert DEFAULT_TEMP_DIR.is_absolute()
+
+    def test_config_dir_ends_with_hark(self) -> None:
+        """DEFAULT_CONFIG_DIR should end with 'hark'."""
+        assert DEFAULT_CONFIG_DIR.name == "hark"
+
+    def test_cache_dir_ends_with_hark_or_cache(self) -> None:
+        """DEFAULT_CACHE_DIR should have 'hark' in the path."""
+        path_parts = DEFAULT_CACHE_DIR.parts
+        assert "hark" in path_parts
+
+    def test_temp_dir_ends_with_hark(self) -> None:
+        """DEFAULT_TEMP_DIR should end with 'hark'."""
+        assert DEFAULT_TEMP_DIR.name == "hark"
+
+    def test_temp_dir_in_system_temp(self) -> None:
+        """DEFAULT_TEMP_DIR should be under system temp directory."""
+        system_temp = Path(tempfile.gettempdir())
+        # Check that DEFAULT_TEMP_DIR is a child of system temp
+        assert system_temp in DEFAULT_TEMP_DIR.parents or DEFAULT_TEMP_DIR.parent == system_temp
+
+    def test_all_derived_paths_under_config_dir(self) -> None:
+        """Paths derived from config dir should be under config dir."""
+        assert DEFAULT_CONFIG_DIR in DEFAULT_CONFIG_PATH.parents
+        assert DEFAULT_CONFIG_DIR in DEFAULT_SPEAKERS_DIR.parents
+
+    def test_model_cache_under_cache_dir(self) -> None:
+        """Model cache should be under cache dir."""
+        assert DEFAULT_CACHE_DIR in DEFAULT_MODEL_CACHE_DIR.parents
+
+
+class TestLanguageDetection:
+    """Tests for language detection constants."""
+
+    def test_unknown_language_probability_is_negative(self) -> None:
+        """UNKNOWN_LANGUAGE_PROBABILITY should be negative to distinguish from valid values."""
+        # Valid probabilities are in [0.0, 1.0], so negative clearly indicates "unknown"
+        assert UNKNOWN_LANGUAGE_PROBABILITY < 0.0
+
+    def test_unknown_language_probability_value(self) -> None:
+        """UNKNOWN_LANGUAGE_PROBABILITY should be -1.0."""
+        assert UNKNOWN_LANGUAGE_PROBABILITY == -1.0
+
+    def test_unknown_language_probability_outside_valid_range(self) -> None:
+        """UNKNOWN_LANGUAGE_PROBABILITY should be outside the valid probability range [0, 1]."""
+        # This test ensures the sentinel value can never be confused with a real probability
+        assert UNKNOWN_LANGUAGE_PROBABILITY < 0.0 or UNKNOWN_LANGUAGE_PROBABILITY > 1.0

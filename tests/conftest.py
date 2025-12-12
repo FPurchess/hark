@@ -1,7 +1,5 @@
 """Shared pytest fixtures for hark tests."""
 
-from __future__ import annotations
-
 import argparse
 from pathlib import Path
 from unittest.mock import MagicMock

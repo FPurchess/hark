@@ -10,8 +10,6 @@ These tests would have caught bugs like:
 - API changes in faster-whisper/whisperx updates
 """
 
-from __future__ import annotations
-
 import inspect
 
 import pytest
