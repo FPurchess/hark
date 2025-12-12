@@ -395,6 +395,7 @@ class TestStereoProcessorLoadModel:
             # Should only load once
             assert mock_whisperx.load_model.call_count == 1
 
+
 class TestStereoProcessorProcess:
     """Tests for process() method."""
 

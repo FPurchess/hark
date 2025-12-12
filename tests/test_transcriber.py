@@ -554,3 +554,84 @@ class TestDataclasses:
         assert result.language == "en"
         assert result.language_probability == 0.95
         assert result.duration == 1.0
+
+
+class TestTranscriberWithBackendDI:
+    """Tests for Transcriber with dependency injection."""
+
+    def test_uses_injected_backend(self, sample_audio: np.ndarray) -> None:
+        """Transcriber should delegate to injected backend."""
+        from hark.backends.base import TranscriptionOutput, TranscriptionSegment
+
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = True
+        mock_backend.transcribe.return_value = TranscriptionOutput(
+            segments=[
+                TranscriptionSegment(
+                    start=0.0,
+                    end=1.0,
+                    text="Hello",
+                    words=[],
+                )
+            ],
+            language="en",
+            language_probability=0.95,
+            duration=1.0,
+        )
+
+        transcriber = Transcriber(backend=mock_backend)
+        result = transcriber.transcribe(sample_audio)
+
+        mock_backend.transcribe.assert_called_once()
+        assert isinstance(result, TranscriptionResult)
+        assert result.text == "Hello"
+
+    def test_is_model_loaded_delegates_to_backend(self) -> None:
+        """is_model_loaded should delegate to backend."""
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = True
+
+        transcriber = Transcriber(backend=mock_backend)
+        assert transcriber.is_model_loaded() is True
+
+        mock_backend.is_loaded.return_value = False
+        assert transcriber.is_model_loaded() is False
+
+    def test_load_model_delegates_to_backend(self) -> None:
+        """load_model should delegate to backend."""
+        mock_backend = MagicMock()
+
+        with patch("hark.transcriber.detect_best_device", return_value="cpu"):
+            transcriber = Transcriber(backend=mock_backend)
+            transcriber.load_model()
+
+            mock_backend.load_model.assert_called_once()
+            call_kwargs = mock_backend.load_model.call_args[1]
+            assert call_kwargs["model_name"] == "base"
+            assert call_kwargs["device"] == "cpu"
+
+    def test_backend_error_raises_transcription_error(self, sample_audio: np.ndarray) -> None:
+        """Backend errors should be wrapped in TranscriptionError."""
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = True
+        mock_backend.transcribe.side_effect = RuntimeError("Backend failed")
+
+        transcriber = Transcriber(backend=mock_backend)
+
+        with pytest.raises(TranscriptionError) as exc_info:
+            transcriber.transcribe(sample_audio)
+        assert "failed" in str(exc_info.value).lower()
+
+    def test_without_backend_uses_faster_whisper(self) -> None:
+        """Without backend, should use faster-whisper directly."""
+        mock_whisper_module = MagicMock()
+
+        with (
+            patch("hark.transcriber.detect_best_device", return_value="cpu"),
+            patch.dict("sys.modules", {"faster_whisper": mock_whisper_module}),
+        ):
+            transcriber = Transcriber()  # No backend
+            transcriber.load_model()
+
+            # Should have created WhisperModel
+            mock_whisper_module.WhisperModel.assert_called_once()
