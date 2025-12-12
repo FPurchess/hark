@@ -5,7 +5,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-> 100% offline, Whisper-powered voice notes from your terminal
+> 100% offline voice notes from your terminal
 
 ### Use Cases
 
@@ -16,12 +16,14 @@
 
 ## Features
 
-- 🎙️ **Record** - Press space to start, Ctrl+C to stop
-- 🔊 **Multi-source** - Capture microphone, system audio, or both
-- ✨ **Transcribe** - Powered by [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
-- 🗣️ **Diarize** - Identify who said what with [WhisperX](https://github.com/m-bain/whisperX)
-- 🔒 **Local** - 100% offline, no cloud required
-- 📄 **Flexible** - Output as plain text, markdown, or SRT subtitles
+- 🎙️ **Instant Recording** - One keypress to capture your thoughts
+- 🔊 **Multi-Source Capture** - Record microphone, system audio, or both simultaneously
+- ✨ **High-Accuracy Transcription** - State-of-the-art speech recognition for crystal-clear text
+- 🗣️ **Speaker Diarization** - Automatically identify and label who said what
+- 🔒 **Complete Privacy** - 100% offline processing, your audio never leaves your device
+- 📄 **Flexible Output** - Export as plain text, markdown, or SRT subtitles
+- 🌍 **Multilingual Support** - Transcribe in dozens of languages with automatic detection
+- ⚡ **Blazing Fast** - Hardware-accelerated processing for near real-time results
 
 ## Installation
 
@@ -141,6 +143,7 @@ Description: Monitor of Built-in Audio
 Requires [BlackHole](https://github.com/ExistentialAudio/BlackHole) virtual audio driver:
 
 1. Install BlackHole:
+
    ```bash
    brew install blackhole-2ch
    ```
@@ -280,6 +283,28 @@ uv run pre-commit install
 uv run pytest
 ```
 
+## Contributing
+
+Contributions are what make the open source community such an amazing place to learn, inspire, and create. Any contributions you make are **greatly appreciated**.
+
+If you have a suggestion that would make this better, please fork the repo and create a pull request. You can also simply open an issue with the tag "enhancement".
+Don't forget to give the project a star! Thanks again!
+
+1. Fork the Project
+2. Create your Feature Branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your Changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the Branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
 ## License
 
-[AGPLv3](LICENSE)
+Distributed under the [**AGPLv3 License**](LICENSE).
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FFPurchess%2Fhark.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FFPurchess%2Fhark?ref=badge_large)
+
+## Acknowledgments
+
+This project would not exist without the hard work of others, first and foremost the maintainers and contributors of the below mentioned projects:
+
+- [faster-whisper](https://github.com/SYSTRAN/faster-whisper)
+- [WhisperX](https://github.com/m-bain/whisperX)
