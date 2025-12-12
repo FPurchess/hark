@@ -71,7 +71,7 @@ class WhisperConfig:
 
     model: str = DEFAULT_MODEL
     language: str = DEFAULT_LANGUAGE
-    device: str = "auto"  # auto, cpu, cuda, vulkan
+    device: str = "auto"  # auto, cpu, cuda
     beam_size: int = DEFAULT_BEAM_SIZE
     vad_filter: bool = DEFAULT_VAD_FILTER
     vad_min_silence_ms: int = DEFAULT_VAD_MIN_SILENCE_MS
@@ -369,8 +369,8 @@ def validate_config(config: HarkConfig) -> list[str]:
         errors.append(
             f"Invalid model '{config.whisper.model}'. Valid models: {', '.join(VALID_MODELS)}"
         )
-    if config.whisper.device not in ("auto", "cpu", "cuda", "vulkan"):
-        errors.append(f"Invalid device '{config.whisper.device}'. Valid: auto, cpu, cuda, vulkan")
+    if config.whisper.device not in ("auto", "cpu", "cuda"):
+        errors.append(f"Invalid device '{config.whisper.device}'. Valid: auto, cpu, cuda")
     if config.whisper.beam_size < 1:
         errors.append(f"Beam size must be at least 1, got {config.whisper.beam_size}")
     if config.whisper.vad_min_silence_ms < 0:
@@ -440,7 +440,7 @@ recording:
 whisper:
   model: base  # tiny, base, small, medium, large, large-v2, large-v3
   language: auto  # or specific language code (en, de, etc.)
-  device: auto  # cpu, cuda, vulkan, or auto-detect
+  device: auto  # cpu, cuda, or auto-detect
   beam_size: 5  # Beam size for decoding (higher = more accurate but slower)
   vad_filter: true  # Enable Voice Activity Detection filtering
   vad_min_silence_ms: 500  # Minimum silence duration (ms) for VAD to split

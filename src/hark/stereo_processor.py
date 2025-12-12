@@ -273,9 +273,6 @@ class StereoProcessor:
         device = self._config.whisper.device
         if device == "auto":
             device = detect_best_device()
-            # WhisperX doesn't support Vulkan, fall back to CPU
-            if device == "vulkan":
-                device = "cpu"
 
         self._device = device
         compute_type = get_compute_type(device)

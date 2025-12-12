@@ -140,11 +140,7 @@ class Diarizer:
     def _resolve_device(self) -> str:
         """Resolve the compute device to use."""
         if self._requested_device == "auto":
-            device = detect_best_device()
-            # WhisperX doesn't support Vulkan, fall back to CPU
-            if device == "vulkan":
-                return "cpu"
-            return device
+            return detect_best_device()
         return self._requested_device
 
     def _load_model(self):

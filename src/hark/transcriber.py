@@ -91,7 +91,7 @@ class Transcriber:
 
         Args:
             model_name: Whisper model name (tiny, base, small, medium, large, etc.).
-            device: Compute device (auto, cpu, cuda, vulkan).
+            device: Compute device (auto, cpu, cuda).
             compute_type: Compute type for inference (auto-detected if None).
             model_cache_dir: Directory for caching models.
             backend: Optional backend for dependency injection. If provided,
@@ -130,11 +130,6 @@ class Transcriber:
             self._actual_device = detect_best_device()
         else:
             self._actual_device = self._requested_device
-
-        # Handle Vulkan - faster-whisper doesn't directly support it,
-        # fall back to CPU for now
-        if self._actual_device == "vulkan":
-            self._actual_device = "cpu"
 
         # Determine compute type
         compute_type = self._compute_type or get_compute_type(self._actual_device)

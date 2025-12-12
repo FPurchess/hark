@@ -395,22 +395,6 @@ class TestStereoProcessorLoadModel:
             # Should only load once
             assert mock_whisperx.load_model.call_count == 1
 
-    def test_vulkan_falls_back_to_cpu(self, mock_stereo_config) -> None:
-        """Vulkan device should fall back to CPU for whisperx."""
-        mock_stereo_config.whisper.device = "auto"
-        mock_whisperx = MagicMock()
-
-        processor = StereoProcessor(mock_stereo_config)
-
-        with (
-            patch.dict("sys.modules", {"whisperx": mock_whisperx}),
-            patch("hark.device.detect_best_device", return_value="vulkan"),
-            patch("hark.device.get_compute_type", return_value="int8"),
-        ):
-            _, device = processor._load_whisperx_model()
-            assert device == "cpu"
-
-
 class TestStereoProcessorProcess:
     """Tests for process() method."""
 

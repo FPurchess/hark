@@ -64,18 +64,6 @@ class TestLoadModel:
             transcriber.load_model()
             mock_detect.assert_called_once()
 
-    def test_vulkan_falls_back_to_cpu(self) -> None:
-        """Vulkan device should fall back to CPU."""
-        mock_whisper = MagicMock()
-
-        with (
-            patch("hark.transcriber.detect_best_device", return_value="vulkan"),
-            patch.dict("sys.modules", {"faster_whisper": mock_whisper}),
-        ):
-            transcriber = Transcriber(device="auto")
-            transcriber.load_model()
-            assert transcriber._actual_device == "cpu"
-
     def test_creates_cache_directory(self, tmp_path: Path) -> None:
         """Should create cache directory if it doesn't exist."""
         mock_whisper = MagicMock()

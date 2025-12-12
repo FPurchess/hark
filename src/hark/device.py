@@ -1,14 +1,11 @@
 """Compute device detection for Whisper inference."""
 
-import subprocess
 from typing import TypedDict
 
 __all__ = [
     "DeviceInfo",
-    "check_vulkan_support",
     "check_cuda_support",
     "check_mps_support",
-    "check_pytorch_vulkan",
     "detect_best_device",
     "get_compute_type",
     "get_device_info",
@@ -18,72 +15,11 @@ __all__ = [
 class DeviceInfo(TypedDict):
     """Information about detected compute devices."""
 
-    vulkan_hardware: bool
-    vulkan_pytorch: bool
     cuda_available: bool
     mps_available: bool
     gpu_name: str | None
     compute_capability: str | None
     recommended_device: str
-
-
-def check_vulkan_support() -> bool:
-    """
-    Check if Vulkan is available on the system.
-
-    Currently only implemented for Linux. On Windows and macOS, returns False
-    as CUDA and MPS respectively are preferred backends.
-
-    Returns:
-        True if Vulkan support is detected (Linux only).
-    """
-    # Vulkan detection uses Linux-specific tools (vulkaninfo, ldconfig)
-    # On Windows/macOS, skip and let CUDA/MPS take priority
-    import sys
-
-    if sys.platform != "linux":
-        return False
-
-    # Check vulkaninfo
-    try:
-        result = subprocess.run(
-            ["vulkaninfo", "--summary"],
-            capture_output=True,
-            text=True,
-            timeout=5,
-        )
-        if result.returncode == 0 and "Vulkan Instance" in result.stdout:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-
-    # Alternative check with vkcube
-    try:
-        result = subprocess.run(
-            ["vkcube", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-
-    # Check for Vulkan loader library
-    try:
-        result = subprocess.run(
-            ["ldconfig", "-p"],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        if "libvulkan" in result.stdout:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError, OSError):
-        pass
-
-    return False
 
 
 def check_cuda_support() -> tuple[bool, str | None, tuple[int, int] | None]:
@@ -128,37 +64,17 @@ def check_mps_support() -> bool:
     return False
 
 
-def check_pytorch_vulkan() -> bool:
-    """
-    Check if PyTorch has Vulkan backend support.
-
-    Returns:
-        True if PyTorch Vulkan backend is available.
-    """
-    try:
-        import torch  # pyrefly: ignore[missing-import]
-
-        if hasattr(torch.backends, "vulkan") and torch.backends.vulkan.is_available():
-            return True
-    except ImportError:
-        pass
-    except Exception:
-        pass
-
-    return False
-
-
 def detect_best_device(verbose: bool = False) -> str:
     """
     Detect the best available compute device.
 
-    Priority: CUDA (compute >= 7.0) -> MPS (macOS) -> Vulkan -> CPU
+    Priority: CUDA (compute >= 7.0) -> MPS (macOS) -> CPU
 
     Args:
         verbose: Print detection details.
 
     Returns:
-        Device string: "cuda", "mps", "vulkan", or "cpu".
+        Device string: "cuda", "mps", or "cpu".
     """
     if verbose:
         print("Detecting available compute devices...")
@@ -188,18 +104,6 @@ def detect_best_device(verbose: bool = False) -> str:
             print("MPS (Metal) detected - using Apple GPU acceleration")
         return "mps"
 
-    # Check Vulkan
-    vulkan_hw = check_vulkan_support()
-    vulkan_pytorch = check_pytorch_vulkan()
-
-    if vulkan_hw and vulkan_pytorch:
-        if verbose:
-            print("Vulkan detected with PyTorch support")
-        return "vulkan"
-
-    if vulkan_hw and verbose:
-        print("Vulkan hardware detected but PyTorch Vulkan backend not available")
-
     # Fall back to CPU
     if verbose:
         print("Using CPU backend")
@@ -211,12 +115,12 @@ def get_compute_type(device: str) -> str:
     Get the recommended compute type for a device.
 
     Args:
-        device: Device string ("cuda", "mps", "vulkan", or "cpu").
+        device: Device string ("cuda", "mps", or "cpu").
 
     Returns:
         Compute type string for faster-whisper.
     """
-    if device in ("cuda", "mps", "vulkan"):
+    if device in ("cuda", "mps"):
         return "float16"
     return "int8"
 
@@ -228,8 +132,6 @@ def get_device_info() -> DeviceInfo:
     Returns:
         DeviceInfo with device detection results.
     """
-    vulkan_hw = check_vulkan_support()
-    vulkan_pytorch = check_pytorch_vulkan()
     cuda_available, gpu_name, compute_cap = check_cuda_support()
     mps_available = check_mps_support()
 
@@ -238,14 +140,10 @@ def get_device_info() -> DeviceInfo:
         recommended = "cuda"
     elif mps_available:
         recommended = "mps"
-    elif vulkan_hw and vulkan_pytorch:
-        recommended = "vulkan"
     else:
         recommended = "cpu"
 
     return DeviceInfo(
-        vulkan_hardware=vulkan_hw,
-        vulkan_pytorch=vulkan_pytorch,
         cuda_available=cuda_available,
         mps_available=mps_available,
         gpu_name=gpu_name,
