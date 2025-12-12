@@ -8,8 +8,8 @@ import pytest
 # Skip entire module on non-Linux platforms
 pytestmark = pytest.mark.skipif(sys.platform != "linux", reason="PulseAudio tests require Linux")
 
-from hark.audio_backends import LoopbackBackend
-from hark.audio_backends.pulseaudio import PulseAudioBackend
+from hark.audio_backends import LoopbackBackend  # noqa: E402
+from hark.audio_backends.pulseaudio import PulseAudioBackend  # noqa: E402
 
 
 def _create_mock_source(
@@ -56,9 +56,7 @@ class TestPulseAudioBackend:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_is_available_connection_fails(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_is_available_connection_fails(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should return False when PulseAudio connection fails."""
         mock_pulse_class.return_value.__enter__.side_effect = Exception("Connection refused")
 
@@ -73,9 +71,7 @@ class TestPulseAudioBackend:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_get_default_loopback_success(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_get_default_loopback_success(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should return monitor device info when available."""
         mock_pulse = MagicMock()
         mock_pulse_class.return_value.__enter__.return_value = mock_pulse
@@ -160,9 +156,7 @@ class TestPulseAudioBackend:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_list_loopback_devices_success(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_list_loopback_devices_success(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should return list of all monitor devices."""
         mock_pulse = MagicMock()
         mock_pulse_class.return_value.__enter__.return_value = mock_pulse
@@ -214,9 +208,7 @@ class TestPulseAudioBackend:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_uses_name_when_no_description(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_uses_name_when_no_description(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should use name when description is not available."""
         mock_pulse = MagicMock()
         mock_pulse_class.return_value.__enter__.return_value = mock_pulse
@@ -262,9 +254,7 @@ class TestPulseAudioBackendExtractedValues:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_extracts_actual_channel_count(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_extracts_actual_channel_count(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should extract actual channel count from source (not hardcoded)."""
         mock_pulse = MagicMock()
         mock_pulse_class.return_value.__enter__.return_value = mock_pulse
@@ -287,9 +277,7 @@ class TestPulseAudioBackendExtractedValues:
 
     @patch("hark.audio_backends.pulseaudio._check_pulsectl_available", return_value=True)
     @patch("pulsectl.Pulse")
-    def test_extracts_actual_sample_rate(
-        self, mock_pulse_class: MagicMock, _: MagicMock
-    ) -> None:
+    def test_extracts_actual_sample_rate(self, mock_pulse_class: MagicMock, _: MagicMock) -> None:
         """Should extract actual sample rate from source (not hardcoded)."""
         mock_pulse = MagicMock()
         mock_pulse_class.return_value.__enter__.return_value = mock_pulse

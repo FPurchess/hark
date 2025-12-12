@@ -8,8 +8,8 @@ import pytest
 # Skip entire module on non-macOS platforms
 pytestmark = pytest.mark.skipif(sys.platform != "darwin", reason="CoreAudio tests require macOS")
 
-from hark.audio_backends import LoopbackBackend
-from hark.audio_backends.coreaudio import CoreAudioBackend
+from hark.audio_backends import LoopbackBackend  # noqa: E402
+from hark.audio_backends.coreaudio import CoreAudioBackend  # noqa: E402
 
 
 def _create_mock_sd_device(
@@ -38,9 +38,7 @@ class TestCoreAudioBackend:
     @patch("hark.audio_backends.coreaudio.is_macos", return_value=True)
     @patch("hark.audio_backends.coreaudio._check_sounddevice_available", return_value=True)
     @patch("hark.audio_backends.coreaudio.sd.query_devices")
-    def test_is_available_success(
-        self, mock_query: MagicMock, _: MagicMock, __: MagicMock
-    ) -> None:
+    def test_is_available_success(self, mock_query: MagicMock, _: MagicMock, __: MagicMock) -> None:
         """Should return True on macOS with sounddevice working."""
         mock_query.return_value = [
             _create_mock_sd_device("Built-in Microphone"),
@@ -68,9 +66,7 @@ class TestCoreAudioBackend:
 
     @patch("hark.audio_backends.coreaudio._check_sounddevice_available", return_value=True)
     @patch("hark.audio_backends.coreaudio.sd.query_devices")
-    def test_get_default_loopback_blackhole_2ch(
-        self, mock_query: MagicMock, _: MagicMock
-    ) -> None:
+    def test_get_default_loopback_blackhole_2ch(self, mock_query: MagicMock, _: MagicMock) -> None:
         """Should detect BlackHole 2ch as default loopback."""
         mock_query.return_value = [
             _create_mock_sd_device("Built-in Microphone", max_input_channels=2),
@@ -88,9 +84,7 @@ class TestCoreAudioBackend:
 
     @patch("hark.audio_backends.coreaudio._check_sounddevice_available", return_value=True)
     @patch("hark.audio_backends.coreaudio.sd.query_devices")
-    def test_get_default_loopback_blackhole_16ch(
-        self, mock_query: MagicMock, _: MagicMock
-    ) -> None:
+    def test_get_default_loopback_blackhole_16ch(self, mock_query: MagicMock, _: MagicMock) -> None:
         """Should detect BlackHole 16ch."""
         mock_query.return_value = [
             _create_mock_sd_device(
@@ -107,9 +101,7 @@ class TestCoreAudioBackend:
 
     @patch("hark.audio_backends.coreaudio._check_sounddevice_available", return_value=True)
     @patch("hark.audio_backends.coreaudio.sd.query_devices")
-    def test_get_default_loopback_none_found(
-        self, mock_query: MagicMock, _: MagicMock
-    ) -> None:
+    def test_get_default_loopback_none_found(self, mock_query: MagicMock, _: MagicMock) -> None:
         """Should return None when no BlackHole devices found."""
         mock_query.return_value = [
             _create_mock_sd_device("Built-in Microphone", max_input_channels=2),

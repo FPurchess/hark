@@ -8,8 +8,8 @@ import pytest
 # Skip entire module on non-Windows platforms
 pytestmark = pytest.mark.skipif(sys.platform != "win32", reason="WASAPI tests require Windows")
 
-from hark.audio_backends import LoopbackBackend
-from hark.audio_backends.wasapi import WASAPIBackend
+from hark.audio_backends import LoopbackBackend  # noqa: E402
+from hark.audio_backends.wasapi import WASAPIBackend  # noqa: E402
 
 
 def _create_mock_wasapi_device(
