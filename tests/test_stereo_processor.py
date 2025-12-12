@@ -371,7 +371,7 @@ class TestStereoProcessorLoadModel:
                 "base",
                 device="cpu",
                 compute_type="int8",
-                download_root="/tmp/models",
+                download_root=str(mock_stereo_config.model_cache_dir),
             )
             assert model is mock_model
             assert device == "cpu"
