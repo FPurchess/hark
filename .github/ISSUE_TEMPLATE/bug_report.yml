@@ -1,0 +1,103 @@
+name: Bug Report
+description: Report something that isn't working correctly
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this issue! Please fill out the form below to help us investigate.
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating System
+      description: Which OS are you using?
+      options:
+        - Linux (Ubuntu/Debian)
+        - Linux (Fedora/RHEL)
+        - Linux (Arch)
+        - Linux (Other)
+        - macOS
+        - Windows 10
+        - Windows 11
+    validations:
+      required: true
+
+  - type: dropdown
+    id: python-version
+    attributes:
+      label: Python Version
+      options:
+        - "3.11"
+        - "3.12"
+        - "3.13"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: installation
+    attributes:
+      label: Installation Method
+      options:
+        - pipx install hark-cli
+        - pip install hark-cli
+        - pip install hark-cli[diarization]
+        - Development (git clone + uv sync)
+    validations:
+      required: true
+
+  - type: dropdown
+    id: input-source
+    attributes:
+      label: Audio Input Source
+      description: Which input mode were you using?
+      options:
+        - Microphone (--input mic)
+        - System audio (--input speaker)
+        - Both (--input both)
+        - Not audio-related
+    validations:
+      required: false
+
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened?
+      description: Describe what went wrong and what you expected to happen.
+      placeholder: |
+        I ran `hark --input speaker recording.txt` and...
+
+        Expected: ...
+        Actual: ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to Reproduce
+      description: How can we reproduce this issue?
+      placeholder: |
+        1. Run `hark ...`
+        2. Press Enter to start recording
+        3. ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs / Error Output
+      description: Paste any error messages or relevant output here. This will be automatically formatted as code.
+      render: shell
+    validations:
+      required: false
+
+  - type: textarea
+    id: config
+    attributes:
+      label: Configuration
+      description: If relevant, paste your `~/.config/hark/config.yaml` (remove any tokens first!)
+      render: yaml
+    validations:
+      required: false
