@@ -43,17 +43,9 @@ sudo apt install portaudio19-dev
 brew install portaudio
 ```
 
-### Optional: Vulkan Acceleration
+**Windows:**
 
-For GPU-accelerated transcription via Vulkan (AMD/Intel GPUs):
-
-**Ubuntu/Debian:**
-
-```bash
-sudo apt install libvulkan1 vulkan-tools mesa-vulkan-drivers
-```
-
-Then set the device in your config or use `--device vulkan`.
+No system dependencies required. Audio libraries are bundled with the Python packages.
 
 ## Quick Start
 
@@ -95,7 +87,7 @@ recording:
 whisper:
   model: base # tiny, base, small, medium, large, large-v2, large-v3
   language: auto # auto, en, de, fr, es, ...
-  device: auto # auto, cpu, cuda, vulkan
+  device: auto # auto, cpu, cuda
 
 preprocessing:
   noise_reduction:
@@ -125,9 +117,13 @@ Hark supports three input modes via `--input` or `recording.input_source`:
 | `speaker` | System audio only (loopback capture)                   |
 | `both`    | Microphone + system audio as stereo (L=mic, R=speaker) |
 
-### System Audio Capture (Linux)
+### System Audio Capture
 
-System audio capture uses PulseAudio/PipeWire monitor sources. To verify your system supports it:
+System audio capture (`--input speaker` or `--input both`) works differently on each platform:
+
+**Linux (PulseAudio/PipeWire):**
+
+Uses monitor sources automatically. To verify your system supports it:
 
 ```bash
 pactl list sources | grep -i monitor
@@ -139,6 +135,29 @@ You should see output like:
 Name: alsa_output.pci-0000_00_1f.3.analog-stereo.monitor
 Description: Monitor of Built-in Audio
 ```
+
+**macOS:**
+
+Requires [BlackHole](https://github.com/ExistentialAudio/BlackHole) virtual audio driver:
+
+1. Install BlackHole:
+   ```bash
+   brew install blackhole-2ch
+   ```
+
+2. Open **Audio MIDI Setup** (in Applications → Utilities)
+
+3. Click **+** → **Create Multi-Output Device**
+
+4. Check both your speakers/headphones AND BlackHole 2ch
+
+5. Set the Multi-Output Device as your default output in System Preferences → Sound
+
+Now hark can capture system audio through BlackHole.
+
+**Windows 10/11:**
+
+Uses WASAPI loopback automatically. No setup required—just ensure your audio output device is working.
 
 ## Speaker Diarization
 

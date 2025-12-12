@@ -1,7 +1,5 @@
 """Tests for hark.recorder module."""
 
-from __future__ import annotations
-
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
@@ -9,6 +7,7 @@ import numpy as np
 import pytest
 import sounddevice as sd
 
+from hark.audio_backends import RecordingConfig
 from hark.audio_sources import AudioSourceInfo, InputSource
 from hark.exceptions import AudioDeviceBusyError, NoLoopbackDeviceError, NoMicrophoneError
 from hark.recorder import AudioRecorder
@@ -75,8 +74,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=temp_dir)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -92,8 +91,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -110,8 +109,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000, channels=1)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile") as mock_sf,
         ):
@@ -131,8 +130,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000, channels=1, buffer_size=1024)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -154,8 +153,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -171,8 +170,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("soundfile.SoundFile"),
             patch("sounddevice.InputStream") as mock_stream_cls,
         ):
@@ -186,8 +185,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("soundfile.SoundFile"),
             patch("sounddevice.InputStream") as mock_stream_cls,
         ):
@@ -201,8 +200,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -221,8 +220,8 @@ class TestAudioRecorderStart:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("soundfile.SoundFile") as mock_sf,
             patch("sounddevice.InputStream") as mock_stream_cls,
         ):
@@ -245,8 +244,8 @@ class TestAudioRecorderStop:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -263,8 +262,8 @@ class TestAudioRecorderStop:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -281,8 +280,8 @@ class TestAudioRecorderStop:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile") as mock_sf,
         ):
@@ -300,8 +299,8 @@ class TestAudioRecorderStop:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -334,8 +333,8 @@ class TestGetDuration:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
             patch("time.time") as mock_time,
@@ -357,8 +356,8 @@ class TestGetDuration:
         recorder = AudioRecorder(temp_dir=tmp_path, sample_rate=16000)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile"),
         ):
@@ -382,8 +381,8 @@ class TestAudioCallback:
         recorder = AudioRecorder(temp_dir=tmp_path, level_callback=callback)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile") as mock_sf,
         ):
@@ -409,8 +408,8 @@ class TestAudioCallback:
         recorder = AudioRecorder(temp_dir=tmp_path)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile") as mock_sf,
         ):
@@ -433,8 +432,8 @@ class TestAudioCallback:
         recorder = AudioRecorder(temp_dir=tmp_path, max_duration=5)
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
-            patch("hark.recorder.get_devices_for_source", return_value=(None, None)),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.get_devices_for_source", return_value=(None, None)),
             patch("sounddevice.InputStream") as mock_stream_cls,
             patch("soundfile.SoundFile") as mock_sf,
             patch("time.time") as mock_time,
@@ -559,28 +558,38 @@ class TestCleanup:
 
     def test_cleanup_closes_sound_file(self, tmp_path: Path) -> None:
         """Cleanup should close sound file."""
+        from hark.recorder import RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path)
 
+        # Create a file manager with a mock sound file
+        file_manager = RecordingFileManager(tmp_path, 16000, 1)
         mock_file = MagicMock()
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+        recorder._file_manager = file_manager
 
         recorder._cleanup()
 
         mock_file.close.assert_called_once()
-        assert recorder._sound_file is None
+        assert recorder._file_manager is None
 
     def test_cleanup_removes_temp_file(self, tmp_path: Path) -> None:
         """Cleanup should remove temp file."""
+        from hark.recorder import RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path)
 
+        # Create a file manager with a real temp file
+        file_manager = RecordingFileManager(tmp_path, 16000, 1)
         temp_file = tmp_path / "test.wav"
         temp_file.touch()
-        recorder._temp_file = temp_file
+        file_manager._temp_file = temp_file
+        recorder._file_manager = file_manager
 
         recorder._cleanup()
 
         assert not temp_file.exists()
-        assert recorder._temp_file is None
+        assert recorder._file_manager is None
 
     def test_cleanup_handles_exceptions(self, tmp_path: Path) -> None:
         """Cleanup should handle exceptions gracefully."""
@@ -600,9 +609,16 @@ class TestMicCallback:
 
     def test_adds_to_buffer(self, tmp_path: Path) -> None:
         """Should add audio data to mic buffer."""
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
         recorder._is_recording = True
         recorder._start_time = 100.0
+
+        # Create file manager and interleaver for dual-stream mode
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        recorder._file_manager = file_manager
+        recorder._interleaver = DualStreamInterleaver(file_manager)
 
         test_data = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
 
@@ -660,8 +676,15 @@ class TestSpeakerCallback:
 
     def test_adds_to_buffer(self, tmp_path: Path) -> None:
         """Should add audio data to speaker buffer."""
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
         recorder._is_recording = True
+
+        # Create file manager and interleaver for dual-stream mode
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        recorder._file_manager = file_manager
+        recorder._interleaver = DualStreamInterleaver(file_manager)
 
         test_data = np.array([[0.3], [0.3], [0.3]], dtype=np.float32)
         recorder._speaker_callback(test_data, 3, {}, sd.CallbackFlags())
@@ -681,26 +704,28 @@ class TestSpeakerCallback:
 
 
 class TestInterleaveBuffers:
-    """Tests for _interleave_buffers method."""
+    """Tests for DualStreamInterleaver - tests the interleaving logic directly."""
 
     def test_creates_stereo_from_mono_chunks(self, tmp_path: Path) -> None:
         """Should interleave mic and speaker into stereo."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
-        recorder._is_recording = True
-        recorder._stop_interleave = MagicMock()
-        recorder._stop_interleave.is_set.side_effect = [False, True]  # Run once then stop
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        # Create a mock file manager with a mock sound file
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         # Add matching chunks to buffers
         mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
         speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
-        recorder._mic_buffer = [mic_chunk]
-        recorder._speaker_buffer = [speaker_chunk]
+        interleaver._mic_buffer = [mic_chunk]
+        interleaver._speaker_buffer = [speaker_chunk]
 
-        recorder._interleave_buffers()
+        # Process buffers manually (simulating one iteration)
+        interleaver._process_buffers()
 
         # Check that stereo was written
         mock_file.write.assert_called_once()
@@ -711,63 +736,62 @@ class TestInterleaveBuffers:
 
     def test_handles_unequal_chunk_lengths(self, tmp_path: Path) -> None:
         """Should truncate to shorter chunk length."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
-        recorder._is_recording = True
-        recorder._stop_interleave = MagicMock()
-        recorder._stop_interleave.is_set.side_effect = [False, True]
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         # Mic has 3 samples, speaker has 2
         mic_chunk = np.array([[0.5], [0.5], [0.5]], dtype=np.float32)
         speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
-        recorder._mic_buffer = [mic_chunk]
-        recorder._speaker_buffer = [speaker_chunk]
+        interleaver._mic_buffer = [mic_chunk]
+        interleaver._speaker_buffer = [speaker_chunk]
 
-        recorder._interleave_buffers()
+        interleaver._process_buffers()
 
         written_data = mock_file.write.call_args[0][0]
         assert written_data.shape[0] == 2  # Truncated to 2 samples
 
     def test_increments_frames_written(self, tmp_path: Path) -> None:
         """Should track frames written."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
-        recorder._is_recording = True
-        recorder._frames_written = 0
-        recorder._stop_interleave = MagicMock()
-        recorder._stop_interleave.is_set.side_effect = [False, True]
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
         speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
-        recorder._mic_buffer = [mic_chunk]
-        recorder._speaker_buffer = [speaker_chunk]
+        interleaver._mic_buffer = [mic_chunk]
+        interleaver._speaker_buffer = [speaker_chunk]
 
-        recorder._interleave_buffers()
+        interleaver._process_buffers()
 
-        assert recorder._frames_written == 2
+        assert file_manager.frames_written == 2
 
     def test_skips_when_buffers_empty(self, tmp_path: Path) -> None:
         """Should not write when buffers are empty."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
-        recorder._is_recording = True
-        recorder._stop_interleave = MagicMock()
-        recorder._stop_interleave.is_set.side_effect = [False, True]
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         # Empty buffers
-        recorder._mic_buffer = []
-        recorder._speaker_buffer = []
+        interleaver._mic_buffer = []
+        interleaver._speaker_buffer = []
 
-        recorder._interleave_buffers()
+        interleaver._process_buffers()
 
         mock_file.write.assert_not_called()
 
@@ -775,23 +799,23 @@ class TestInterleaveBuffers:
         """Should handle write errors without crashing."""
         import soundfile as sf
 
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
-        recorder._is_recording = True
-        recorder._stop_interleave = MagicMock()
-        recorder._stop_interleave.is_set.side_effect = [False, True]
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
         mock_file.write.side_effect = sf.SoundFileError("Write failed")
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         mic_chunk = np.array([[0.5]], dtype=np.float32)
         speaker_chunk = np.array([[0.3]], dtype=np.float32)
-        recorder._mic_buffer = [mic_chunk]
-        recorder._speaker_buffer = [speaker_chunk]
+        interleaver._mic_buffer = [mic_chunk]
+        interleaver._speaker_buffer = [speaker_chunk]
 
         # Should not raise
-        recorder._interleave_buffers()
+        interleaver._process_buffers()
 
 
 class TestFlushRemainingBuffers:
@@ -799,38 +823,40 @@ class TestFlushRemainingBuffers:
 
     def test_flushes_matched_buffers(self, tmp_path: Path) -> None:
         """Should process remaining matched chunks."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
         mock_file = MagicMock()
         mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager._sound_file = mock_file
+
+        interleaver = DualStreamInterleaver(file_manager)
 
         mic_chunk = np.array([[0.5], [0.5]], dtype=np.float32)
         speaker_chunk = np.array([[0.3], [0.3]], dtype=np.float32)
-        recorder._mic_buffer = [mic_chunk]
-        recorder._speaker_buffer = [speaker_chunk]
+        interleaver._mic_buffer = [mic_chunk]
+        interleaver._speaker_buffer = [speaker_chunk]
 
-        recorder._flush_remaining_buffers()
+        interleaver._flush_remaining()
 
         mock_file.write.assert_called_once()
 
     def test_clears_unmatched_buffers(self, tmp_path: Path) -> None:
         """Should clear any unmatched remaining data."""
-        recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
 
-        mock_file = MagicMock()
-        mock_file.closed = False
-        recorder._sound_file = mock_file
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        interleaver = DualStreamInterleaver(file_manager)
 
         # Unequal number of chunks
-        recorder._mic_buffer = [np.array([[0.5]], dtype=np.float32)]
-        recorder._speaker_buffer = []  # No matching speaker data
+        interleaver._mic_buffer = [np.array([[0.5]], dtype=np.float32)]
+        interleaver._speaker_buffer = []  # No matching speaker data
 
-        recorder._flush_remaining_buffers()
+        interleaver._flush_remaining()
 
         # Buffers should be cleared
-        assert len(recorder._mic_buffer) == 0
-        assert len(recorder._speaker_buffer) == 0
+        assert len(interleaver._mic_buffer) == 0
+        assert len(interleaver._speaker_buffer) == 0
 
 
 class TestDualStreamStop:
@@ -838,38 +864,48 @@ class TestDualStreamStop:
 
     def test_stops_interleave_thread(self, tmp_path: Path) -> None:
         """Should stop the interleave thread."""
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
         recorder._is_recording = True
-        recorder._temp_file = tmp_path / "test.wav"
-        recorder._temp_file.touch()
 
+        # Create components
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        temp_file = tmp_path / "test.wav"
+        temp_file.touch()
+        file_manager._temp_file = temp_file
+        recorder._file_manager = file_manager
+
+        interleaver = DualStreamInterleaver(file_manager)
         mock_thread = MagicMock()
-        recorder._interleave_thread = mock_thread
-
-        mock_file = MagicMock()
-        mock_file.closed = False
-        recorder._sound_file = mock_file
+        interleaver._thread = mock_thread
+        recorder._interleaver = interleaver
 
         recorder.stop()
 
-        recorder._stop_interleave.set()
         mock_thread.join.assert_called_once()
 
     def test_closes_dual_streams(self, tmp_path: Path) -> None:
         """Should close both mic and speaker streams."""
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
         recorder._is_recording = True
-        recorder._temp_file = tmp_path / "test.wav"
-        recorder._temp_file.touch()
+
+        # Create file manager
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        temp_file = tmp_path / "test.wav"
+        temp_file.touch()
+        file_manager._temp_file = temp_file
+        recorder._file_manager = file_manager
+
+        # Create interleaver
+        recorder._interleaver = DualStreamInterleaver(file_manager)
 
         mock_mic_stream = MagicMock()
         mock_speaker_stream = MagicMock()
         recorder._mic_stream = mock_mic_stream
         recorder._speaker_stream = mock_speaker_stream
-
-        mock_file = MagicMock()
-        mock_file.closed = False
-        recorder._sound_file = mock_file
 
         recorder.stop()
 
@@ -880,18 +916,24 @@ class TestDualStreamStop:
 
     def test_handles_stream_stop_errors(self, tmp_path: Path) -> None:
         """Should handle errors when stopping streams gracefully."""
+        from hark.recorder import DualStreamInterleaver, RecordingFileManager
+
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
         recorder._is_recording = True
-        recorder._temp_file = tmp_path / "test.wav"
-        recorder._temp_file.touch()
+
+        # Create file manager
+        file_manager = RecordingFileManager(tmp_path, 16000, 2)
+        temp_file = tmp_path / "test.wav"
+        temp_file.touch()
+        file_manager._temp_file = temp_file
+        recorder._file_manager = file_manager
+
+        # Create interleaver
+        recorder._interleaver = DualStreamInterleaver(file_manager)
 
         mock_mic_stream = MagicMock()
         mock_mic_stream.stop.side_effect = sd.PortAudioError("Stop failed")
         recorder._mic_stream = mock_mic_stream
-
-        mock_file = MagicMock()
-        mock_file.closed = False
-        recorder._sound_file = mock_file
 
         # Should not raise
         result = recorder.stop()
@@ -906,7 +948,7 @@ class TestMultiSourceRecording:
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="speaker")
 
         with patch(
-            "hark.recorder.validate_source_availability",
+            "hark.recorder.recorder.validate_source_availability",
             return_value=["No system audio loopback device found"],
         ):
             with pytest.raises(NoLoopbackDeviceError):
@@ -920,15 +962,15 @@ class TestMultiSourceRecording:
             channels=2,
             sample_rate=44100,
             is_loopback=True,
-            pulse_source_name="test.monitor",
+            recording_config=RecordingConfig(env={"PULSE_SOURCE": "test.monitor"}, device="pulse"),
         )
 
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="speaker")
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
             patch(
-                "hark.recorder.get_devices_for_source",
+                "hark.recorder.recorder.get_devices_for_source",
                 return_value=(None, mock_loopback),
             ),
             patch("sounddevice.InputStream") as mock_stream_cls,
@@ -961,7 +1003,7 @@ class TestMultiSourceRecording:
             channels=2,
             sample_rate=44100,
             is_loopback=True,
-            pulse_source_name="test.monitor",
+            recording_config=RecordingConfig(env={"PULSE_SOURCE": "test.monitor"}, device="pulse"),
         )
 
         recorder = AudioRecorder(
@@ -969,9 +1011,9 @@ class TestMultiSourceRecording:
         )
 
         with (
-            patch("hark.recorder.validate_source_availability", return_value=[]),
+            patch("hark.recorder.recorder.validate_source_availability", return_value=[]),
             patch(
-                "hark.recorder.get_devices_for_source",
+                "hark.recorder.recorder.get_devices_for_source",
                 return_value=(mock_mic, mock_loopback),
             ),
             patch("sounddevice.InputStream") as mock_stream_cls,
@@ -993,7 +1035,7 @@ class TestMultiSourceRecording:
         recorder = AudioRecorder(temp_dir=tmp_path, input_source="both", channels=2)
 
         with patch(
-            "hark.recorder.validate_source_availability",
+            "hark.recorder.recorder.validate_source_availability",
             return_value=["No microphone device found"],
         ):
             with pytest.raises(NoMicrophoneError):

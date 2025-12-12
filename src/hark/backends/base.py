@@ -4,12 +4,17 @@ These define the contracts that backend implementations must follow.
 Using Protocol allows for structural subtyping (duck typing with type safety).
 """
 
-from __future__ import annotations
-
 from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 import numpy as np
+
+from hark.constants import (
+    DEFAULT_BEAM_SIZE,
+    DEFAULT_SAMPLE_RATE,
+    DEFAULT_VAD_FILTER,
+    DEFAULT_VAD_MIN_SILENCE_MS,
+)
 
 # ============================================================
 # Data Classes for Transcription
@@ -123,6 +128,9 @@ class TranscriptionBackend(Protocol):
         audio: np.ndarray,
         language: str | None = None,
         word_timestamps: bool = False,
+        beam_size: int = DEFAULT_BEAM_SIZE,
+        vad_filter: bool = DEFAULT_VAD_FILTER,
+        vad_min_silence_ms: int = DEFAULT_VAD_MIN_SILENCE_MS,
     ) -> TranscriptionOutput:
         """Transcribe audio.
 
@@ -130,6 +138,9 @@ class TranscriptionBackend(Protocol):
             audio: Audio data as float32 numpy array, mono, 16kHz.
             language: Language code or None for auto-detection.
             word_timestamps: Whether to include word-level timestamps.
+            beam_size: Beam size for decoding (default: 5).
+            vad_filter: Enable VAD filtering (default: True).
+            vad_min_silence_ms: Minimum silence duration in ms for VAD (default: 500).
 
         Returns:
             TranscriptionOutput with segments, language, and probability.
@@ -178,7 +189,7 @@ class DiarizationBackend(Protocol):
     def transcribe_and_diarize(
         self,
         audio: np.ndarray,
-        sample_rate: int = 16000,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
         language: str | None = None,
         num_speakers: int | None = None,
     ) -> DiarizationOutput:
@@ -186,7 +197,7 @@ class DiarizationBackend(Protocol):
 
         Args:
             audio: Audio data as float32 numpy array.
-            sample_rate: Sample rate of audio (default 16000).
+            sample_rate: Sample rate of audio.
             language: Language code or None for auto-detection.
             num_speakers: Expected number of speakers, or None for auto.
 

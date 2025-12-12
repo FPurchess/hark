@@ -1,5 +1,8 @@
 """Default constants and configuration values."""
 
+import os
+import sys
+import tempfile
 from pathlib import Path
 
 __all__ = [
@@ -12,6 +15,9 @@ __all__ = [
     "VALID_INPUT_SOURCES",
     "DEFAULT_MODEL",
     "DEFAULT_LANGUAGE",
+    "DEFAULT_BEAM_SIZE",
+    "DEFAULT_VAD_FILTER",
+    "DEFAULT_VAD_MIN_SILENCE_MS",
     "VALID_MODELS",
     "DEFAULT_NOISE_STRENGTH",
     "DEFAULT_TARGET_LEVEL_DB",
@@ -27,6 +33,8 @@ __all__ = [
     "DEFAULT_TEMP_DIR",
     "DEFAULT_SPEAKERS_DIR",
     "DEFAULT_DIARIZATION_MODEL",
+    "DEFAULT_LOCAL_SPEAKER",
+    "UNKNOWN_LANGUAGE_PROBABILITY",
     "EXIT_SUCCESS",
     "EXIT_ERROR",
     "EXIT_INTERRUPT",
@@ -45,6 +53,9 @@ VALID_INPUT_SOURCES = ["mic", "speaker", "both"]
 # Whisper defaults
 DEFAULT_MODEL = "base"
 DEFAULT_LANGUAGE = "auto"
+DEFAULT_BEAM_SIZE = 5  # Beam size for decoding
+DEFAULT_VAD_FILTER = True  # Enable voice activity detection filtering
+DEFAULT_VAD_MIN_SILENCE_MS = 500  # Minimum silence duration (ms) for VAD
 VALID_MODELS = ["tiny", "base", "small", "medium", "large", "large-v2", "large-v3"]
 
 # Preprocessing defaults
@@ -58,16 +69,37 @@ DEFAULT_OUTPUT_FORMAT = "plain"
 VALID_OUTPUT_FORMATS = ["plain", "markdown", "srt"]
 DEFAULT_ENCODING = "utf-8"
 
-# Paths
-DEFAULT_CONFIG_DIR = Path.home() / ".config" / "hark"
+# Paths - platform-specific defaults
+if sys.platform == "win32":
+    # Windows: Use AppData and LocalAppData
+    _appdata = os.environ.get("APPDATA", "")
+    _localappdata = os.environ.get("LOCALAPPDATA", "")
+    DEFAULT_CONFIG_DIR = Path(_appdata) / "hark" if _appdata else Path.home() / "hark"
+    DEFAULT_CACHE_DIR = (
+        Path(_localappdata) / "hark" / "cache" if _localappdata else Path.home() / "hark" / "cache"
+    )
+elif sys.platform == "darwin":
+    # macOS: Use Library directories
+    DEFAULT_CONFIG_DIR = Path.home() / "Library" / "Application Support" / "hark"
+    DEFAULT_CACHE_DIR = Path.home() / "Library" / "Caches" / "hark"
+else:
+    # Linux and other Unix-like: Use XDG conventions
+    DEFAULT_CONFIG_DIR = Path.home() / ".config" / "hark"
+    DEFAULT_CACHE_DIR = Path.home() / ".cache" / "hark"
+
 DEFAULT_CONFIG_PATH = DEFAULT_CONFIG_DIR / "config.yaml"
-DEFAULT_CACHE_DIR = Path.home() / ".cache" / "hark"
 DEFAULT_MODEL_CACHE_DIR = DEFAULT_CACHE_DIR / "models"
-DEFAULT_TEMP_DIR = Path("/tmp/hark")
+DEFAULT_TEMP_DIR = Path(tempfile.gettempdir()) / "hark"
 DEFAULT_SPEAKERS_DIR = DEFAULT_CONFIG_DIR / "speakers"
 
 # Diarization defaults
 DEFAULT_DIARIZATION_MODEL = "pyannote/speaker-diarization-3.1"
+DEFAULT_LOCAL_SPEAKER = "SPEAKER_00"  # Default label for local mic speaker
+
+# Language detection
+# Sentinel value indicating language probability is unavailable (e.g., from diarization backends)
+# Valid probabilities are in range [0.0, 1.0], so -1.0 clearly indicates "unknown"
+UNKNOWN_LANGUAGE_PROBABILITY = -1.0
 
 # Exit codes
 EXIT_SUCCESS = 0

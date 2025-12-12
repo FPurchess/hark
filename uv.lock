@@ -1006,6 +1006,8 @@ dependencies = [
     { name = "noisereduce" },
     { name = "numpy", version = "2.0.2", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.13'" },
     { name = "numpy", version = "2.2.6", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.13'" },
+    { name = "pulsectl", marker = "sys_platform == 'linux'" },
+    { name = "pyaudiowpatch", marker = "sys_platform == 'win32'" },
     { name = "pyyaml" },
     { name = "sounddevice" },
     { name = "soundfile" },
@@ -1040,6 +1042,8 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.24.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.0.0" },
     { name = "pre-commit", marker = "extra == 'test'", specifier = ">=3.0.0" },
+    { name = "pulsectl", marker = "sys_platform == 'linux'", specifier = ">=24.0.0" },
+    { name = "pyaudiowpatch", marker = "sys_platform == 'win32'", specifier = ">=0.2.12.7" },
     { name = "pyrefly", marker = "extra == 'dev'", specifier = ">=0.45.0" },
     { name = "pyrefly", marker = "extra == 'test'", specifier = ">=0.45.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=7.0.0" },
@@ -2388,6 +2392,15 @@ wheels = [
 ]
 
 [[package]]
+name = "pulsectl"
+version = "24.12.0"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/f5/c5/f070a8c5f0a5742f7aebb5d90869ee1805174c03928dfafd3833de58bd57/pulsectl-24.12.0.tar.gz", hash = "sha256:288d6715232ac6f3dcdb123fbecaa2c0b9a50ea4087e6e87c3f841ab0a8a07fc", size = 41200, upload-time = "2024-12-26T13:22:57.389Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/62/a9/5b119f86dd1a053c55da7d0355fca2ad215bae6f7f4777d46b307a8cc3e9/pulsectl-24.12.0-py2.py3-none-any.whl", hash = "sha256:13a60be940594f03ead3245b3dfe3aff4a3f9a792af347674bde5e716d4f76d2", size = 35133, upload-time = "2024-12-26T13:22:53.395Z" },
+]
+
+[[package]]
 name = "pyannote-audio"
 version = "3.4.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2487,6 +2500,19 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/35/04/4bcfe0dd588577a188328b806f3a7213d8cead0ce5fe5784d01fd57df93f/pyannote.pipeline-3.0.1.tar.gz", hash = "sha256:021794e26a2cf5d8fb5bb1835951e71f5fac33eb14e23dfb7468e16b1b805151", size = 34486, upload-time = "2023-09-22T20:16:49.951Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/83/42/1bf7cbf061ed05c580bfb63bffdd3f3474cbd5c02bee4fac518eea9e9d9e/pyannote.pipeline-3.0.1-py3-none-any.whl", hash = "sha256:819bde4c4dd514f740f2373dfec794832b9fc8e346a35e43a7681625ee187393", size = 31517, upload-time = "2023-09-22T20:16:48.153Z" },
+]
+
+[[package]]
+name = "pyaudiowpatch"
+version = "0.2.12.7"
+source = { registry = "https://pypi.org/simple" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1b/cb/5acad3464caff0589f607ac9d6ed5385a9e6540548f21c7aee313687a1cd/PyAudioWPatch-0.2.12.7-cp311-cp311-win32.whl", hash = "sha256:aab05690a9d9380831ca82e4bf18ee8c3da7401f406f7594f576bdfd298897fb", size = 85170, upload-time = "2025-01-27T11:57:14.135Z" },
+    { url = "https://files.pythonhosted.org/packages/5e/b6/e672b5dcf227895c6fbbad265c82214325819ecb419a89b1955a690bc79e/PyAudioWPatch-0.2.12.7-cp311-cp311-win_amd64.whl", hash = "sha256:57a33f6549db2a3161c155526eccc30ca82d4188f9277dfcbb15055c9a5a53e0", size = 87013, upload-time = "2025-01-27T11:57:16.153Z" },
+    { url = "https://files.pythonhosted.org/packages/0e/8d/784c19759109040f8c560df1a2a7d1ecb6b27b5173f298f2fc9fe8b5266d/PyAudioWPatch-0.2.12.7-cp312-cp312-win32.whl", hash = "sha256:6a0e5658b265b5505bc5cec1d58ff59129270630dffecbe3975067d1b4b4afaa", size = 85318, upload-time = "2025-01-27T11:57:17.894Z" },
+    { url = "https://files.pythonhosted.org/packages/f9/ff/c91c3b79f664433675d26355da899a6ebc6ec8dce1013aae54009bda7100/PyAudioWPatch-0.2.12.7-cp312-cp312-win_amd64.whl", hash = "sha256:5cc251aa938bf18df42136e8cc7a9c824f41c96a93be0c184ed0a44ff417a965", size = 87251, upload-time = "2025-01-27T11:57:19.948Z" },
+    { url = "https://files.pythonhosted.org/packages/6c/7a/9b9760990d9b6ed59fbd6fa28c1c148803248c8d6873fa0d1747ab56d7cc/PyAudioWPatch-0.2.12.7-cp313-cp313-win32.whl", hash = "sha256:09c492ec2e63e4fff0a50fd4228b910f4621df3c54af648a0b1d5764b49b0130", size = 85325, upload-time = "2025-01-27T11:57:21.239Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/c0/920e28a5ab91c839bd9a82238035ac5a5fa52c3fb2e683d42fa454b6582c/PyAudioWPatch-0.2.12.7-cp313-cp313-win_amd64.whl", hash = "sha256:050e2859e6131012e70df780412428cc6d649dcd7a3082a0a45fff369b59cdc8", size = 87233, upload-time = "2025-01-27T11:57:23.737Z" },
 ]
 
 [[package]]

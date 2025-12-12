@@ -1,11 +1,5 @@
 """WhisperX backend implementation for diarization."""
 
-from __future__ import annotations
-
-import contextlib
-import io
-import sys
-
 import numpy as np
 
 from hark.backends.base import (
@@ -13,18 +7,8 @@ from hark.backends.base import (
     DiarizedSegment,
     WordInfo,
 )
-
-
-@contextlib.contextmanager
-def _suppress_output():
-    """Suppress stdout/stderr to hide noisy library output."""
-    old_stdout, old_stderr = sys.stdout, sys.stderr
-    try:
-        sys.stdout = io.StringIO()
-        sys.stderr = io.StringIO()
-        yield
-    finally:
-        sys.stdout, sys.stderr = old_stdout, old_stderr
+from hark.constants import DEFAULT_SAMPLE_RATE, UNKNOWN_LANGUAGE_PROBABILITY
+from hark.utils import renumber_speaker, suppress_output
 
 
 class WhisperXBackend:
@@ -71,7 +55,7 @@ class WhisperXBackend:
         self._device = device
         self._hf_token = hf_token
 
-        with _suppress_output():
+        with suppress_output():
             self._model = whisperx.load_model(
                 model_name,
                 device=device,
@@ -82,7 +66,7 @@ class WhisperXBackend:
     def transcribe_and_diarize(
         self,
         audio: np.ndarray,
-        sample_rate: int = 16000,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
         language: str | None = None,
         num_speakers: int | None = None,
     ) -> DiarizationOutput:
@@ -111,12 +95,12 @@ class WhisperXBackend:
             audio = audio.astype(np.float32)
 
         # Transcribe
-        with _suppress_output():
+        with suppress_output():
             result = self._model.transcribe(audio, batch_size=16, language=language)
         detected_language = result.get("language", "unknown")
 
         # Align (get word-level timestamps)
-        with _suppress_output():
+        with suppress_output():
             model_a, metadata = whisperx.load_align_model(
                 language_code=detected_language,
                 device=self._device,
@@ -131,7 +115,7 @@ class WhisperXBackend:
             )
 
         # Diarize - CRITICAL: use whisperx.diarize.DiarizationPipeline
-        with _suppress_output():
+        with suppress_output():
             diarize_model = whisperx.diarize.DiarizationPipeline(
                 use_auth_token=self._hf_token,
                 device=self._device,
@@ -147,7 +131,7 @@ class WhisperXBackend:
             diarize_kwargs["min_speakers"] = num_speakers
             diarize_kwargs["max_speakers"] = num_speakers
 
-        with _suppress_output():
+        with suppress_output():
             diarize_segments = diarize_model(
                 audio,
                 **diarize_kwargs,  # pyrefly: ignore[bad-argument-type]
@@ -182,12 +166,7 @@ class WhisperXBackend:
             speaker = seg.get("speaker", "UNKNOWN")
 
             # 1-index speakers (SPEAKER_00 -> SPEAKER_01)
-            if speaker.startswith("SPEAKER_"):
-                try:
-                    num = int(speaker.split("_")[1])
-                    speaker = f"SPEAKER_{num + 1:02d}"
-                except (IndexError, ValueError):
-                    pass
+            speaker = renumber_speaker(speaker)
 
             speakers_seen.add(speaker)
 
@@ -217,7 +196,8 @@ class WhisperXBackend:
         duration = segments[-1].end if segments else 0.0
 
         # If language was explicitly specified, confidence is 100%
-        language_probability = 1.0 if explicit_language else 0.0
+        # Otherwise, mark as unknown (WhisperX doesn't expose language probability)
+        language_probability = 1.0 if explicit_language else UNKNOWN_LANGUAGE_PROBABILITY
 
         return DiarizationOutput(
             segments=segments,

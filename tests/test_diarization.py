@@ -1,11 +1,11 @@
 """Tests for diarization functionality."""
 
-from __future__ import annotations
+from unittest.mock import MagicMock, patch
 
 import numpy as np
 import pytest
 
-from hark.diarizer import DiarizationResult, DiarizedSegment, WordSegment
+from hark.diarizer import DiarizationResult, DiarizedSegment, Diarizer, WordSegment
 from hark.formatter import (
     MarkdownFormatter,
     PlainFormatter,
@@ -531,3 +531,84 @@ class TestInteractiveLocalSpeakerExclusion:
         renamed = interactive_speaker_naming(result, quiet=True, local_speaker_name="Me")
 
         assert renamed.speakers == ["Me", "SPEAKER_01"]
+
+
+class TestDiarizerWithBackendDI:
+    """Tests for Diarizer with dependency injection."""
+
+    def test_uses_injected_backend(self, sample_audio: np.ndarray) -> None:
+        """Diarizer should delegate to injected backend."""
+        from hark.backends.base import DiarizationOutput
+        from hark.backends.base import DiarizedSegment as BackendDiarizedSegment
+
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = True
+        mock_backend.transcribe_and_diarize.return_value = DiarizationOutput(
+            segments=[
+                BackendDiarizedSegment(
+                    start=0.0,
+                    end=1.0,
+                    text="Hello",
+                    speaker="SPEAKER_01",
+                    words=[],
+                )
+            ],
+            speakers=["SPEAKER_01"],
+            language="en",
+            language_probability=0.95,
+            duration=1.0,
+        )
+
+        diarizer = Diarizer(backend=mock_backend)
+        result = diarizer.transcribe_and_diarize(sample_audio)
+
+        mock_backend.transcribe_and_diarize.assert_called_once()
+        assert isinstance(result, DiarizationResult)
+        assert result.speakers == ["SPEAKER_01"]
+
+    def test_backend_load_model_called_if_not_loaded(self, sample_audio: np.ndarray) -> None:
+        """Backend.load_model should be called if not loaded."""
+        from hark.backends.base import DiarizationOutput
+
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = False
+        mock_backend.transcribe_and_diarize.return_value = DiarizationOutput(
+            segments=[],
+            speakers=[],
+            language="en",
+            language_probability=0.95,
+            duration=0.0,
+        )
+
+        with patch("hark.diarizer.detect_best_device", return_value="cpu"):
+            diarizer = Diarizer(backend=mock_backend, hf_token="test")
+            diarizer.transcribe_and_diarize(sample_audio)
+
+            mock_backend.load_model.assert_called_once()
+            call_kwargs = mock_backend.load_model.call_args[1]
+            assert call_kwargs["model_name"] == "base"
+
+    def test_backend_error_raises_diarization_error(self, sample_audio: np.ndarray) -> None:
+        """Backend errors should be wrapped in DiarizationError."""
+        from hark.exceptions import DiarizationError
+
+        mock_backend = MagicMock()
+        mock_backend.is_loaded.return_value = True
+        mock_backend.transcribe_and_diarize.side_effect = RuntimeError("Backend failed")
+
+        diarizer = Diarizer(backend=mock_backend)
+
+        with pytest.raises(DiarizationError) as exc_info:
+            diarizer.transcribe_and_diarize(sample_audio)
+        assert "failed" in str(exc_info.value).lower()
+
+    def test_without_backend_checks_dependencies(self) -> None:
+        """Without backend, should check for whisperx dependency."""
+        from hark.exceptions import DependencyMissingError
+
+        # Mock whisperx as not installed
+        with patch.dict("sys.modules", {"whisperx": None}):
+            diarizer = Diarizer(hf_token="test")  # No backend
+
+            with pytest.raises(DependencyMissingError):
+                diarizer.transcribe_and_diarize(np.zeros(16000, dtype=np.float32))

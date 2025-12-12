@@ -1,8 +1,8 @@
 """Interactive speaker naming for diarization results."""
 
-from __future__ import annotations
-
 from typing import TYPE_CHECKING
+
+from hark.constants import DEFAULT_LOCAL_SPEAKER
 
 if TYPE_CHECKING:
     from hark.diarizer import DiarizationResult, DiarizedSegment, WordSegment
@@ -15,7 +15,7 @@ __all__ = [
 
 
 def get_speaker_excerpt(
-    segments: list[DiarizedSegment],
+    segments: "list[DiarizedSegment]",
     speaker: str,
     max_length: int = 80,
 ) -> str:
@@ -40,9 +40,9 @@ def get_speaker_excerpt(
 
 
 def _update_word_speakers(
-    words: list[WordSegment],
+    words: "list[WordSegment]",
     speaker_names: dict[str, str],
-) -> list[WordSegment]:
+) -> "list[WordSegment]":
     """Update speaker labels in word-level segments."""
     from hark.diarizer import WordSegment
 
@@ -63,11 +63,11 @@ def _update_word_speakers(
 
 
 def interactive_speaker_naming(
-    result: DiarizationResult,
+    result: "DiarizationResult",
     quiet: bool = False,
-    local_speaker_name: str = "SPEAKER_00",
-    ui: UI | None = None,
-) -> DiarizationResult:
+    local_speaker_name: str = DEFAULT_LOCAL_SPEAKER,
+    ui: "UI | None" = None,
+) -> "DiarizationResult":
     """
     Interactively prompt user to name detected speakers.
 

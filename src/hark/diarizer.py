@@ -4,18 +4,18 @@ Supports dependency injection for testing via the `backend` parameter.
 If no backend is provided, uses WhisperX directly (default behavior).
 """
 
-from __future__ import annotations
-
-import contextlib
-import io
-import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-from hark.constants import DEFAULT_MODEL_CACHE_DIR, VALID_MODELS
+from hark.constants import (
+    DEFAULT_MODEL_CACHE_DIR,
+    DEFAULT_SAMPLE_RATE,
+    UNKNOWN_LANGUAGE_PROBABILITY,
+    VALID_MODELS,
+)
 from hark.device import detect_best_device, get_compute_type
 from hark.exceptions import (
     DependencyMissingError,
@@ -23,26 +23,10 @@ from hark.exceptions import (
     GatedModelError,
     MissingTokenError,
 )
+from hark.utils import renumber_speaker, suppress_output
 
 if TYPE_CHECKING:
     from hark.backends.base import DiarizationBackend
-
-
-@contextlib.contextmanager
-def _suppress_output():
-    """Temporarily suppress stdout/stderr to hide noisy library output."""
-    # Save original streams
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    try:
-        # Redirect to devnull
-        sys.stdout = io.StringIO()
-        sys.stderr = io.StringIO()
-        yield
-    finally:
-        # Restore original streams
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
 
 
 __all__ = [
@@ -109,7 +93,7 @@ class Diarizer:
         hf_token: str | None = None,
         num_speakers: int | None = None,
         model_cache_dir: Path | None = None,
-        backend: DiarizationBackend | None = None,
+        backend: "DiarizationBackend | None" = None,
     ) -> None:
         """
         Initialize the diarizer.
@@ -156,11 +140,7 @@ class Diarizer:
     def _resolve_device(self) -> str:
         """Resolve the compute device to use."""
         if self._requested_device == "auto":
-            device = detect_best_device()
-            # WhisperX doesn't support Vulkan, fall back to CPU
-            if device == "vulkan":
-                return "cpu"
-            return device
+            return detect_best_device()
         return self._requested_device
 
     def _load_model(self):
@@ -174,7 +154,7 @@ class Diarizer:
         self._actual_compute_type = self._compute_type or get_compute_type(self._actual_device)
 
         # Suppress noisy version mismatch warnings from bundled VAD model
-        with _suppress_output():
+        with suppress_output():
             self._whisperx_model = whisperx.load_model(
                 self._model_name,
                 device=self._actual_device,
@@ -187,7 +167,7 @@ class Diarizer:
     def transcribe_and_diarize(
         self,
         audio: np.ndarray,
-        sample_rate: int = 16000,
+        sample_rate: int = DEFAULT_SAMPLE_RATE,
         language: str | None = None,
     ) -> DiarizationResult:
         """
@@ -286,12 +266,12 @@ class Diarizer:
             device = self._actual_device
 
             # Transcribe (suppress noisy library output)
-            with _suppress_output():
+            with suppress_output():
                 result = model.transcribe(audio, batch_size=16, language=language)
             detected_language = result.get("language", "unknown")
 
             # Align (get word-level timestamps)
-            with _suppress_output():
+            with suppress_output():
                 model_a, metadata = whisperx.load_align_model(
                     language_code=detected_language,
                     device=device,
@@ -306,7 +286,7 @@ class Diarizer:
                 )
 
             # Diarize (suppress noisy library output)
-            with _suppress_output():
+            with suppress_output():
                 diarize_model = whisperx.diarize.DiarizationPipeline(
                     use_auth_token=self._hf_token,
                     device=device,
@@ -322,7 +302,7 @@ class Diarizer:
                 diarize_kwargs["min_speakers"] = self._num_speakers
                 diarize_kwargs["max_speakers"] = self._num_speakers
 
-            with _suppress_output():
+            with suppress_output():
                 diarize_segments = diarize_model(
                     audio,
                     **diarize_kwargs,  # pyrefly: ignore[bad-argument-type]
@@ -362,12 +342,7 @@ class Diarizer:
             speaker = seg.get("speaker", "UNKNOWN")
 
             # Convert SPEAKER_00 to SPEAKER_01 (1-indexed for remote speakers)
-            if speaker.startswith("SPEAKER_"):
-                try:
-                    num = int(speaker.split("_")[1])
-                    speaker = f"SPEAKER_{num + 1:02d}"
-                except (IndexError, ValueError):
-                    pass
+            speaker = renumber_speaker(speaker)
 
             speakers_seen.add(speaker)
 
@@ -376,12 +351,8 @@ class Diarizer:
             for word_info in seg.get("words", []):
                 word_speaker = word_info.get("speaker")
                 # Apply same 1-indexing to word speakers
-                if word_speaker and word_speaker.startswith("SPEAKER_"):
-                    try:
-                        num = int(word_speaker.split("_")[1])
-                        word_speaker = f"SPEAKER_{num + 1:02d}"
-                    except (IndexError, ValueError):
-                        pass
+                if word_speaker:
+                    word_speaker = renumber_speaker(word_speaker)
 
                 words.append(
                     WordSegment(
@@ -405,7 +376,8 @@ class Diarizer:
         duration = segments[-1].end if segments else 0.0
 
         # If language was explicitly specified, confidence is 100%
-        language_probability = 1.0 if explicit_language else 0.0
+        # Otherwise, mark as unknown (WhisperX doesn't expose language probability)
+        language_probability = 1.0 if explicit_language else UNKNOWN_LANGUAGE_PROBABILITY
 
         return DiarizationResult(
             segments=segments,

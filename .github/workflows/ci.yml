@@ -30,17 +30,38 @@ jobs:
         run: uv run pyrefly check src/hark/
 
   test:
-    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        include:
+          # Linux: Test all Python versions (primary platform)
+          - os: ubuntu-latest
+            python-version: "3.11"
+          - os: ubuntu-latest
+            python-version: "3.12"
+          - os: ubuntu-latest
+            python-version: "3.13"
+          # macOS: Test latest Python only (verify platform-specific code)
+          - os: macos-latest
+            python-version: "3.13"
+          # Windows: Test latest Python only (verify platform-specific code)
+          - os: windows-latest
+            python-version: "3.13"
+
+    runs-on: ${{ matrix.os }}
 
     steps:
       - uses: actions/checkout@v6
 
-      - name: Install system dependencies
-        run: sudo apt-get update && sudo apt-get install -y libportaudio2
+      - name: Install system dependencies (Linux)
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libportaudio2 libpulse0
+
+      - name: Install system dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install portaudio
+
+      # Windows: No system deps needed (PyAudioWPatch bundles PortAudio)
 
       - uses: astral-sh/setup-uv@v7
 
@@ -61,7 +82,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y libportaudio2 ffmpeg
+          sudo apt-get install -y libportaudio2 libpulse0 ffmpeg
 
       - uses: astral-sh/setup-uv@v7
 

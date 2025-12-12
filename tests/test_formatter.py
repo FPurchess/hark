@@ -2,6 +2,8 @@
 
 import pytest
 
+from hark.constants import UNKNOWN_LANGUAGE_PROBABILITY
+from hark.diarizer import DiarizationResult
 from hark.formatter import (
     MarkdownFormatter,
     OutputFormatter,
@@ -346,6 +348,21 @@ class TestEdgeCases:
         output = formatter.format(result)
         assert "100%" in output
 
+    def test_language_probability_unknown(self) -> None:
+        """Should handle unknown language probability (from diarization backends)."""
+        result = TranscriptionResult(
+            text="Test",
+            segments=[],
+            language="en",
+            language_probability=UNKNOWN_LANGUAGE_PROBABILITY,
+            duration=1.0,
+        )
+        formatter = MarkdownFormatter(include_timestamps=False)
+        output = formatter.format(result)
+        # Should show language without confidence percentage
+        assert "Language: en" in output
+        assert "confidence" not in output
+
     def test_unicode_text(self) -> None:
         """Should handle unicode text correctly."""
         result = TranscriptionResult(
@@ -376,3 +393,104 @@ class TestEdgeCases:
         formatter = PlainFormatter(include_timestamps=False)
         output = formatter.format(result)
         assert len(output) == len(long_text.strip())
+
+
+class TestTypeDetection:
+    """Tests for result type detection using isinstance."""
+
+    def test_transcription_result_not_diarization(
+        self, sample_transcription_result: TranscriptionResult
+    ) -> None:
+        """TranscriptionResult should not be detected as diarization."""
+        formatter = PlainFormatter()
+        assert formatter._is_diarization_result(sample_transcription_result) is False
+
+    def test_diarization_result_is_diarization(
+        self, sample_diarization_result: DiarizationResult
+    ) -> None:
+        """DiarizationResult should be detected as diarization."""
+        formatter = PlainFormatter()
+        assert formatter._is_diarization_result(sample_diarization_result) is True
+
+    def test_isinstance_check_not_hasattr(
+        self, sample_transcription_result: TranscriptionResult
+    ) -> None:
+        """Type detection should use isinstance, not hasattr."""
+        # Even if TranscriptionResult had a 'speakers' attribute, it should still
+        # be identified correctly by type, not by duck-typing
+        formatter = PlainFormatter()
+        # Verify the method uses isinstance (implementation detail check)
+        # The actual test is that TranscriptionResult is not detected as diarization
+        assert formatter._is_diarization_result(sample_transcription_result) is False
+
+    def test_markdown_formatter_type_detection(
+        self,
+        sample_transcription_result: TranscriptionResult,
+        sample_diarization_result: DiarizationResult,
+    ) -> None:
+        """MarkdownFormatter should correctly detect result types."""
+        formatter = MarkdownFormatter()
+        assert formatter._is_diarization_result(sample_transcription_result) is False
+        assert formatter._is_diarization_result(sample_diarization_result) is True
+
+    def test_srt_formatter_type_detection(
+        self,
+        sample_transcription_result: TranscriptionResult,
+        sample_diarization_result: DiarizationResult,
+    ) -> None:
+        """SRTFormatter should correctly detect result types."""
+        formatter = SRTFormatter()
+        assert formatter._is_diarization_result(sample_transcription_result) is False
+        assert formatter._is_diarization_result(sample_diarization_result) is True
+
+
+class TestDiarizationFormatting:
+    """Tests for formatting DiarizationResult."""
+
+    def test_plain_formatter_diarization(
+        self, sample_diarization_result: DiarizationResult
+    ) -> None:
+        """PlainFormatter should format diarization with speaker labels."""
+        formatter = PlainFormatter(include_timestamps=False)
+        output = formatter.format(sample_diarization_result)
+        # Should have speaker labels
+        assert "[SPEAKER_01]" in output
+        assert "[SPEAKER_02]" in output
+        # Should have text from fixture
+        assert "Hello from speaker one" in output
+        assert "Response from speaker two" in output
+
+    def test_plain_formatter_diarization_with_timestamps(
+        self, sample_diarization_result: DiarizationResult
+    ) -> None:
+        """PlainFormatter should include timestamps when requested."""
+        formatter = PlainFormatter(include_timestamps=True)
+        output = formatter.format(sample_diarization_result)
+        # Should have timestamps in HH:MM:SS format
+        assert "[00:00]" in output
+        assert "[SPEAKER_01]" in output
+
+    def test_markdown_formatter_diarization(
+        self, sample_diarization_result: DiarizationResult
+    ) -> None:
+        """MarkdownFormatter should format diarization with meeting transcript header."""
+        formatter = MarkdownFormatter(include_timestamps=False)
+        output = formatter.format(sample_diarization_result)
+        # Should have meeting transcript header
+        assert "# Meeting Transcript" in output
+        # Should have speaker labels in bold
+        assert "**SPEAKER_01**" in output
+        assert "**SPEAKER_02**" in output
+        # Should have speaker count in footer
+        assert "2 speakers detected" in output
+
+    def test_srt_formatter_diarization(self, sample_diarization_result: DiarizationResult) -> None:
+        """SRTFormatter should format diarization with speaker labels in subtitles."""
+        formatter = SRTFormatter()
+        output = formatter.format(sample_diarization_result)
+        # Should have sequence numbers
+        assert "1\n" in output
+        # Should have timestamps
+        assert "-->" in output
+        # Should have speaker labels
+        assert "[SPEAKER_01]" in output

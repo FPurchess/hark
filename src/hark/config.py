@@ -1,7 +1,5 @@
 """Configuration management for hark."""
 
-from __future__ import annotations
-
 import argparse
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -29,6 +27,7 @@ __all__ = [
 ]
 
 from hark.constants import (
+    DEFAULT_BEAM_SIZE,
     DEFAULT_CHANNELS,
     DEFAULT_CONFIG_DIR,
     DEFAULT_CONFIG_PATH,
@@ -47,6 +46,8 @@ from hark.constants import (
     DEFAULT_SPEAKERS_DIR,
     DEFAULT_TARGET_LEVEL_DB,
     DEFAULT_TEMP_DIR,
+    DEFAULT_VAD_FILTER,
+    DEFAULT_VAD_MIN_SILENCE_MS,
     VALID_INPUT_SOURCES,
     VALID_MODELS,
     VALID_OUTPUT_FORMATS,
@@ -70,7 +71,10 @@ class WhisperConfig:
 
     model: str = DEFAULT_MODEL
     language: str = DEFAULT_LANGUAGE
-    device: str = "auto"  # auto, cpu, cuda, vulkan
+    device: str = "auto"  # auto, cpu, cuda
+    beam_size: int = DEFAULT_BEAM_SIZE
+    vad_filter: bool = DEFAULT_VAD_FILTER
+    vad_min_silence_ms: int = DEFAULT_VAD_MIN_SILENCE_MS
 
 
 @dataclass
@@ -174,6 +178,9 @@ def _dict_to_config(data: dict[str, Any]) -> HarkConfig:
             model=w.get("model", DEFAULT_MODEL),
             language=w.get("language", DEFAULT_LANGUAGE),
             device=w.get("device", "auto"),
+            beam_size=w.get("beam_size", DEFAULT_BEAM_SIZE),
+            vad_filter=w.get("vad_filter", DEFAULT_VAD_FILTER),
+            vad_min_silence_ms=w.get("vad_min_silence_ms", DEFAULT_VAD_MIN_SILENCE_MS),
         )
 
     if "preprocessing" in data:
@@ -256,7 +263,7 @@ def load_config(config_path: Path | None = None) -> HarkConfig:
         return HarkConfig()
 
     try:
-        with open(path) as f:
+        with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
 
         if data is None:
@@ -362,8 +369,14 @@ def validate_config(config: HarkConfig) -> list[str]:
         errors.append(
             f"Invalid model '{config.whisper.model}'. Valid models: {', '.join(VALID_MODELS)}"
         )
-    if config.whisper.device not in ("auto", "cpu", "cuda", "vulkan"):
-        errors.append(f"Invalid device '{config.whisper.device}'. Valid: auto, cpu, cuda, vulkan")
+    if config.whisper.device not in ("auto", "cpu", "cuda"):
+        errors.append(f"Invalid device '{config.whisper.device}'. Valid: auto, cpu, cuda")
+    if config.whisper.beam_size < 1:
+        errors.append(f"Beam size must be at least 1, got {config.whisper.beam_size}")
+    if config.whisper.vad_min_silence_ms < 0:
+        errors.append(
+            f"VAD min silence must be non-negative, got {config.whisper.vad_min_silence_ms}"
+        )
 
     # Preprocessing validation
     noise_strength = config.preprocessing.noise_reduction.strength
@@ -404,10 +417,16 @@ def create_default_config_file(path: Path | None = None) -> Path:
     Returns:
         Path to the created config file.
     """
+    from hark.constants import (
+        DEFAULT_MODEL_CACHE_DIR,
+        DEFAULT_SPEAKERS_DIR,
+        DEFAULT_TEMP_DIR,
+    )
+
     config_path = path or get_default_config_path()
     config_path.parent.mkdir(parents=True, exist_ok=True)
 
-    default_config = """\
+    default_config = f"""\
 # Hark Configuration
 
 # Audio Recording Settings
@@ -421,7 +440,10 @@ recording:
 whisper:
   model: base  # tiny, base, small, medium, large, large-v2, large-v3
   language: auto  # or specific language code (en, de, etc.)
-  device: auto  # cpu, cuda, vulkan, or auto-detect
+  device: auto  # cpu, cuda, or auto-detect
+  beam_size: 5  # Beam size for decoding (higher = more accurate but slower)
+  vad_filter: true  # Enable Voice Activity Detection filtering
+  vad_min_silence_ms: 500  # Minimum silence duration (ms) for VAD to split
 
 # Audio Preprocessing
 preprocessing:
@@ -453,21 +475,21 @@ interface:
 
 # Performance Settings
 performance:
-  temp_directory: /tmp/hark
+  temp_directory: {DEFAULT_TEMP_DIR}
 
 # Cache Settings
 cache:
-  model_cache_dir: ~/.cache/hark/models
+  model_cache_dir: {DEFAULT_MODEL_CACHE_DIR}
 
 # Speaker Diarization Settings (requires: pip install hark-cli[diarization])
 # diarization:
 #   hf_token: "hf_xxxxxxxxxxxxx"  # Required: HuggingFace token
 #   model: "pyannote/speaker-diarization-3.1"
 #   local_speaker_name: null  # Name for local mic in --input both (null = SPEAKER_00)
-#   speakers_dir: ~/.config/hark/speakers  # Voice profile storage
+#   speakers_dir: {DEFAULT_SPEAKERS_DIR}  # Voice profile storage
 """
 
-    with open(config_path, "w") as f:
+    with open(config_path, "w", encoding="utf-8") as f:
         f.write(default_config)
 
     return config_path

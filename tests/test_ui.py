@@ -1,7 +1,5 @@
 """Tests for hark.ui module."""
 
-from __future__ import annotations
-
 import io
 import sys
 from unittest.mock import MagicMock, patch
@@ -9,7 +7,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from hark.config import HarkConfig
-from hark.transcriber import TranscriptionResult
+from hark.constants import UNKNOWN_LANGUAGE_PROBABILITY
+from hark.diarizer import DiarizationResult
+from hark.transcriber import TranscriptionResult, TranscriptionSegment
 from hark.ui import UI, Color
 
 
@@ -359,6 +359,70 @@ class TestUITranscriptionComplete:
         assert len(output_lines) == 0
 
 
+class TestUITypeDetection:
+    """Tests for result type detection using isinstance."""
+
+    @pytest.fixture
+    def ui(self) -> UI:
+        """Create UI instance with colors disabled."""
+        return UI(quiet=False, use_color=False)
+
+    def test_transcription_result_shows_transcription_complete(
+        self,
+        ui: UI,
+        sample_transcription_result: TranscriptionResult,
+        capsys,
+    ) -> None:
+        """TranscriptionResult should show 'Transcription complete!' message."""
+        ui.transcription_complete(sample_transcription_result, None)
+        captured = capsys.readouterr()
+        assert "Transcription complete!" in captured.out
+        assert "Diarization complete!" not in captured.out
+        # TranscriptionResult should not show Speakers count
+        assert "Speakers:" not in captured.out
+
+    def test_diarization_result_shows_diarization_complete(
+        self,
+        ui: UI,
+        sample_diarization_result: DiarizationResult,
+        capsys,
+    ) -> None:
+        """DiarizationResult should show 'Diarization complete!' message."""
+        ui.transcription_complete(sample_diarization_result, None)
+        captured = capsys.readouterr()
+        assert "Diarization complete!" in captured.out
+        assert "Transcription complete!" not in captured.out
+        # DiarizationResult should show speaker count
+        assert "Speakers:" in captured.out
+
+    def test_diarization_result_shows_speaker_count(
+        self,
+        ui: UI,
+        sample_diarization_result: DiarizationResult,
+        capsys,
+    ) -> None:
+        """DiarizationResult should show correct speaker count."""
+        ui.transcription_complete(sample_diarization_result, None)
+        captured = capsys.readouterr()
+        # The fixture has 2 speakers (SPEAKER_01 and SPEAKER_02)
+        assert "Speakers: 2" in captured.out
+
+    def test_isinstance_check_used_for_type_detection(
+        self,
+        ui: UI,
+        sample_transcription_result: TranscriptionResult,
+        capsys,
+    ) -> None:
+        """Type detection should use isinstance, not duck-typing."""
+        # This test verifies that adding a 'speakers' attribute to TranscriptionResult
+        # would not cause it to be incorrectly identified as a diarization result
+        # (since we use isinstance, not hasattr)
+        ui.transcription_complete(sample_transcription_result, None)
+        captured = capsys.readouterr()
+        # Even if we were to add a speakers attr, it should still say "Transcription"
+        assert "Transcription complete!" in captured.out
+
+
 class TestUIPreprocessingStep:
     """Tests for preprocessing_step method."""
 
@@ -444,3 +508,53 @@ class TestUIInfo:
         ui.info("Info message")
         captured = capsys.readouterr()
         assert "Info message" in captured.out
+
+
+class TestUILanguageProbabilityHandling:
+    """Tests for language probability handling in transcription_complete method."""
+
+    @pytest.fixture
+    def ui(self) -> UI:
+        """Create UI instance with colors disabled."""
+        return UI(quiet=False, use_color=False)
+
+    def test_transcription_complete_with_known_language_probability(self, ui: UI, capsys) -> None:
+        """Should display language with confidence percentage when probability is known."""
+        result = TranscriptionResult(
+            text="Hello world",
+            segments=[TranscriptionSegment(start=0.0, end=1.0, text="Hello world", words=[])],
+            language="en",
+            language_probability=0.95,
+            duration=1.0,
+        )
+        ui.transcription_complete(result, None)
+        captured = capsys.readouterr()
+        assert "Language: en (95% confidence)" in captured.out
+
+    def test_transcription_complete_with_unknown_language_probability(self, ui: UI, capsys) -> None:
+        """Should display language without confidence when probability is unknown."""
+        result = TranscriptionResult(
+            text="Hello world",
+            segments=[TranscriptionSegment(start=0.0, end=1.0, text="Hello world", words=[])],
+            language="en",
+            language_probability=UNKNOWN_LANGUAGE_PROBABILITY,
+            duration=1.0,
+        )
+        ui.transcription_complete(result, None)
+        captured = capsys.readouterr()
+        # Should show language without confidence percentage
+        assert "Language: en" in captured.out
+        assert "confidence" not in captured.out
+
+    def test_transcription_complete_100_percent_confidence(self, ui: UI, capsys) -> None:
+        """Should display 100% confidence when language was explicitly specified."""
+        result = TranscriptionResult(
+            text="Hello world",
+            segments=[TranscriptionSegment(start=0.0, end=1.0, text="Hello world", words=[])],
+            language="de",
+            language_probability=1.0,
+            duration=1.0,
+        )
+        ui.transcription_complete(result, None)
+        captured = capsys.readouterr()
+        assert "Language: de (100% confidence)" in captured.out

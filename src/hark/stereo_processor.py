@@ -1,29 +1,12 @@
 """Stereo audio processing for diarization with local/remote speaker separation."""
 
-from __future__ import annotations
-
-import contextlib
-import io
-import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 import numpy as np
 
-
-@contextlib.contextmanager
-def _suppress_output():
-    """Temporarily suppress stdout/stderr to hide noisy library output."""
-    old_stdout = sys.stdout
-    old_stderr = sys.stderr
-    try:
-        sys.stdout = io.StringIO()
-        sys.stderr = io.StringIO()
-        yield
-    finally:
-        sys.stdout = old_stdout
-        sys.stderr = old_stderr
-
+from hark.constants import DEFAULT_LOCAL_SPEAKER, UNKNOWN_LANGUAGE_PROBABILITY
+from hark.utils import renumber_speaker, suppress_output
 
 if TYPE_CHECKING:
     from hark.config import HarkConfig
@@ -83,10 +66,10 @@ def split_stereo_channels(
 
 
 def merge_diarization_timelines(
-    local_segments: list[DiarizedSegment],
-    remote_result: DiarizationResult,
-    local_speaker_name: str = "SPEAKER_00",
-) -> DiarizationResult:
+    local_segments: "list[DiarizedSegment]",
+    remote_result: "DiarizationResult",
+    local_speaker_name: str = DEFAULT_LOCAL_SPEAKER,
+) -> "DiarizationResult":
     """
     Merge local (mic) and remote (speaker) diarization timelines.
 
@@ -125,8 +108,8 @@ def merge_diarization_timelines(
 
 
 def _merge_overlapping_segments(
-    segments: list[DiarizedSegment],
-) -> list[DiarizedSegment]:
+    segments: "list[DiarizedSegment]",
+) -> "list[DiarizedSegment]":
     """
     Merge segments that overlap in time.
 
@@ -257,7 +240,7 @@ class StereoProcessor:
 
     def __init__(
         self,
-        config: HarkConfig,
+        config: "HarkConfig",
         num_speakers: int | None = None,
     ) -> None:
         """
@@ -290,15 +273,12 @@ class StereoProcessor:
         device = self._config.whisper.device
         if device == "auto":
             device = detect_best_device()
-            # WhisperX doesn't support Vulkan, fall back to CPU
-            if device == "vulkan":
-                device = "cpu"
 
         self._device = device
         compute_type = get_compute_type(device)
 
         # Load model once (suppress noisy version mismatch warnings)
-        with _suppress_output():
+        with suppress_output():
             self._whisperx_model = whisperx.load_model(
                 self._config.whisper.model,
                 device=device,
@@ -312,7 +292,7 @@ class StereoProcessor:
         self,
         stereo_audio: np.ndarray,
         sample_rate: int,
-    ) -> DiarizationResult:
+    ) -> "DiarizationResult":
         """
         Process stereo audio with diarization.
 
@@ -333,7 +313,7 @@ class StereoProcessor:
         left, right = split_stereo_channels(stereo_audio, sample_rate)
 
         # Get local speaker name from config
-        local_speaker = self._config.diarization.local_speaker_name or "SPEAKER_00"
+        local_speaker = self._config.diarization.local_speaker_name or DEFAULT_LOCAL_SPEAKER
 
         # Determine language
         language = (
@@ -371,7 +351,7 @@ class StereoProcessor:
         channel: ChannelAudio,
         speaker_name: str,
         language: str | None,
-    ) -> list[DiarizedSegment]:
+    ) -> "list[DiarizedSegment]":
         """
         Transcribe a channel without diarization using the shared WhisperX model.
 
@@ -416,7 +396,7 @@ class StereoProcessor:
         device: str,
         channel: ChannelAudio,
         language: str | None,
-    ) -> DiarizationResult:
+    ) -> "DiarizationResult":
         """
         Transcribe and diarize a channel using the shared WhisperX model.
 
@@ -451,7 +431,7 @@ class StereoProcessor:
             detected_language = result.get("language", "unknown")
 
             # Align (get word-level timestamps)
-            with _suppress_output():
+            with suppress_output():
                 model_a, metadata = whisperx.load_align_model(
                     language_code=detected_language,
                     device=device,
@@ -466,7 +446,7 @@ class StereoProcessor:
             )
 
             # Diarize (suppress noisy version mismatch warnings)
-            with _suppress_output():
+            with suppress_output():
                 diarize_model = whisperx.diarize.DiarizationPipeline(
                     use_auth_token=hf_token,
                     device=device,
@@ -477,7 +457,7 @@ class StereoProcessor:
                 diarize_kwargs["min_speakers"] = self._num_speakers
                 diarize_kwargs["max_speakers"] = self._num_speakers
 
-            with _suppress_output():
+            with suppress_output():
                 diarize_segments = diarize_model(
                     audio,
                     **diarize_kwargs,  # pyrefly: ignore[bad-argument-type]
@@ -494,12 +474,7 @@ class StereoProcessor:
                 speaker = seg.get("speaker", "UNKNOWN")
 
                 # Convert SPEAKER_00 to SPEAKER_01 (1-indexed for remote speakers)
-                if speaker.startswith("SPEAKER_"):
-                    try:
-                        num = int(speaker.split("_")[1])
-                        speaker = f"SPEAKER_{num + 1:02d}"
-                    except (IndexError, ValueError):
-                        pass
+                speaker = renumber_speaker(speaker)
 
                 speakers_seen.add(speaker)
 
@@ -508,12 +483,8 @@ class StereoProcessor:
                 for word_info in seg.get("words", []):
                     word_speaker = word_info.get("speaker")
                     # Apply same 1-indexing to word speakers
-                    if word_speaker and word_speaker.startswith("SPEAKER_"):
-                        try:
-                            num = int(word_speaker.split("_")[1])
-                            word_speaker = f"SPEAKER_{num + 1:02d}"
-                        except (IndexError, ValueError):
-                            pass
+                    if word_speaker:
+                        word_speaker = renumber_speaker(word_speaker)
 
                     words.append(
                         WordSegment(
@@ -537,7 +508,8 @@ class StereoProcessor:
             duration = segments[-1].end if segments else 0.0
 
             # If language was explicitly specified, confidence is 100%
-            language_probability = 1.0 if language else 0.0
+            # Otherwise, mark as unknown (WhisperX doesn't expose language probability)
+            language_probability = 1.0 if language else UNKNOWN_LANGUAGE_PROBABILITY
 
             return DiarizationResult(
                 segments=segments,

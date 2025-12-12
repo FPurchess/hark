@@ -1,15 +1,15 @@
 """Terminal UI for hark."""
 
-from __future__ import annotations
-
 import sys
 from enum import Enum
 from typing import TYPE_CHECKING
 
+from hark.constants import UNKNOWN_LANGUAGE_PROBABILITY
+from hark.diarizer import DiarizationResult
+from hark.transcriber import TranscriptionResult
+
 if TYPE_CHECKING:
     from hark.config import HarkConfig
-    from hark.diarizer import DiarizationResult
-    from hark.transcriber import TranscriptionResult
 
 __all__ = [
     "Color",
@@ -78,7 +78,7 @@ class UI:
         print(self._color(title, Color.BOLD))
         print("=" * HEADER_WIDTH)
 
-    def config_summary(self, config: HarkConfig, output_file: str | None) -> None:
+    def config_summary(self, config: "HarkConfig", output_file: str | None) -> None:
         """Print configuration summary."""
         if self._quiet:
             return
@@ -236,8 +236,8 @@ class UI:
         print()
         print()
 
-        # Check if this is a diarization result (has speakers attribute)
-        is_diarization = hasattr(result, "speakers")
+        # Check if this is a diarization result using explicit type check
+        is_diarization = isinstance(result, DiarizationResult)
 
         if is_diarization:
             check = self._color("\u2713 Diarization complete!", Color.GREEN)
@@ -246,7 +246,7 @@ class UI:
         print(check)
 
         # Calculate word count from text or segments
-        if hasattr(result, "text") and result.text:
+        if isinstance(result, TranscriptionResult) and result.text:
             word_count = sum(1 for _ in result.text.split())
         else:
             # DiarizationResult: count words from segments
@@ -254,11 +254,15 @@ class UI:
 
         print(f"  - Duration: {result.duration:.1f} seconds")
         print(f"  - Words: {word_count}")
-        print(f"  - Language: {result.language} ({result.language_probability:.0%} confidence)")
+        # Handle unknown language probability (from diarization backends)
+        if result.language_probability == UNKNOWN_LANGUAGE_PROBABILITY:
+            print(f"  - Language: {result.language}")
+        else:
+            print(f"  - Language: {result.language} ({result.language_probability:.0%} confidence)")
 
         # Show speaker count for diarization
         if is_diarization:
-            print(f"  - Speakers: {len(result.speakers)}")  # type: ignore[union-attr]
+            print(f"  - Speakers: {len(result.speakers)}")
 
         if output_path:
             print(f"  - Output: {output_path}")

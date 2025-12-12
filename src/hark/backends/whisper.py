@@ -1,7 +1,5 @@
 """Faster-whisper backend implementation."""
 
-from __future__ import annotations
-
 import numpy as np
 
 from hark.backends.base import (
@@ -9,6 +7,7 @@ from hark.backends.base import (
     TranscriptionSegment,
     WordInfo,
 )
+from hark.constants import DEFAULT_BEAM_SIZE, DEFAULT_VAD_FILTER, DEFAULT_VAD_MIN_SILENCE_MS
 
 
 class FasterWhisperBackend:
@@ -59,6 +58,9 @@ class FasterWhisperBackend:
         audio: np.ndarray,
         language: str | None = None,
         word_timestamps: bool = False,
+        beam_size: int = DEFAULT_BEAM_SIZE,
+        vad_filter: bool = DEFAULT_VAD_FILTER,
+        vad_min_silence_ms: int = DEFAULT_VAD_MIN_SILENCE_MS,
     ) -> TranscriptionOutput:
         """Transcribe audio using faster-whisper.
 
@@ -66,6 +68,9 @@ class FasterWhisperBackend:
             audio: Audio data as float32 numpy array (mono, 16kHz).
             language: Language code or None for auto-detection.
             word_timestamps: Include word-level timestamps.
+            beam_size: Beam size for decoding (default: 5).
+            vad_filter: Enable VAD filtering (default: True).
+            vad_min_silence_ms: Minimum silence duration in ms for VAD (default: 500).
 
         Returns:
             TranscriptionOutput with segments and language info.
@@ -85,9 +90,9 @@ class FasterWhisperBackend:
             audio,
             language=language,
             word_timestamps=word_timestamps,
-            beam_size=5,
-            vad_filter=True,
-            vad_parameters={"min_silence_duration_ms": 500},
+            beam_size=beam_size,
+            vad_filter=vad_filter,
+            vad_parameters={"min_silence_duration_ms": vad_min_silence_ms},
         )
 
         # Collect segments
