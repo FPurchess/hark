@@ -4,6 +4,7 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/downloads/)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg)](https://www.gnu.org/licenses/agpl-3.0)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FFPurchess%2Fhark.svg?type=shield)](https://app.fossa.com/projects/git%2Bgithub.com%2FFPurchess%2Fhark?ref=badge_shield)
 
 > 100% offline, Whisper-powered voice notes from your terminal
 
@@ -187,6 +188,9 @@ Identify who said what in multi-speaker recordings using [WhisperX](https://gith
    diarization:
      hf_token: "hf_xxxxxxxxxxxxx"
    ```
+
+
+[![FOSSA Status](https://app.fossa.com/api/projects/git%2Bgithub.com%2FFPurchess%2Fhark.svg?type=large)](https://app.fossa.com/projects/git%2Bgithub.com%2FFPurchess%2Fhark?ref=badge_large)
 
 ### Usage
 
